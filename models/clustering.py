@@ -22,11 +22,18 @@ class DocumentClusterer:
 
     def vectorize_documents(self, documents: List[str]) -> np.ndarray:
         """Vectorize documents using TF-IDF."""
+        # Configure vectorizer with adaptive parameters for small datasets
+        n_docs = len(documents)
+        min_df = 1  # Always allow terms in at least 1 document
+        # For small datasets, allow terms in all documents; for larger datasets, 95% max
+        max_df = n_docs if n_docs < 5 else int(0.95 * n_docs) + 1
+        
         self.vectorizer = TfidfVectorizer(
-            max_features=1000,
-            min_df=2,
-            max_df=0.95,
-            stop_words='english'
+            max_features=None,  # Don't limit features for small datasets
+            min_df=min_df,
+            max_df=max_df,
+            stop_words='english',
+            token_pattern=r"(?u)\b[a-z]{2,}\b"  # Only words with 2+ chars
         )
         self.features = self.vectorizer.fit_transform(documents).toarray()
         return self.features
@@ -157,7 +164,7 @@ class DocumentClusterer:
         if len(unique_clusters) < 2:
             return {
                 'silhouette_score': 0.0,
-                'davies_bouldin_score': np.inf,
+                'davies_bouldin_score': None,
                 'calinski_harabasz_score': 0.0,
                 'note': 'Only one cluster found'
             }
@@ -167,7 +174,7 @@ class DocumentClusterer:
         if valid_mask.sum() < 2:
             return {
                 'silhouette_score': 0.0,
-                'davies_bouldin_score': np.inf,
+                'davies_bouldin_score': None,
                 'calinski_harabasz_score': 0.0,
                 'note': 'Not enough valid clusters'
             }
@@ -175,11 +182,41 @@ class DocumentClusterer:
         valid_features = self.features[valid_mask]
         valid_clusters = self.clusters[valid_mask]
         
-        return {
-            'silhouette_score': silhouette_score(valid_features, valid_clusters),
-            'davies_bouldin_score': davies_bouldin_score(valid_features, valid_clusters),
-            'calinski_harabasz_score': calinski_harabasz_score(valid_features, valid_clusters)
-        }
+        # Check if we have enough samples for metrics
+        # Both silhouette and calinski-harabasz require: num_clusters >= 2 and num_clusters < num_samples
+        unique_valid_clusters = len(np.unique(valid_clusters))
+        n_valid_samples = len(valid_clusters)
+        
+        result = {}
+        
+        # Silhouette score: requires 2 <= num_clusters < num_samples
+        if unique_valid_clusters >= 2 and unique_valid_clusters < n_valid_samples:
+            try:
+                result['silhouette_score'] = float(silhouette_score(valid_features, valid_clusters))
+            except:
+                result['silhouette_score'] = 0.0
+        else:
+            result['silhouette_score'] = 0.0
+        
+        # Davies-Bouldin score: also requires 2 <= num_clusters < num_samples
+        if unique_valid_clusters >= 2 and unique_valid_clusters < n_valid_samples:
+            try:
+                result['davies_bouldin_score'] = float(davies_bouldin_score(valid_features, valid_clusters))
+            except:
+                result['davies_bouldin_score'] = None
+        else:
+            result['davies_bouldin_score'] = None
+        
+        # Calinski-Harabasz score: also requires 2 <= num_clusters < num_samples
+        if unique_valid_clusters >= 2 and unique_valid_clusters < n_valid_samples:
+            try:
+                result['calinski_harabasz_score'] = float(calinski_harabasz_score(valid_features, valid_clusters))
+            except:
+                result['calinski_harabasz_score'] = 0.0
+        else:
+            result['calinski_harabasz_score'] = 0.0
+        
+        return result
 
     def generate_clustering_report(self) -> str:
         """Generate clustering report."""

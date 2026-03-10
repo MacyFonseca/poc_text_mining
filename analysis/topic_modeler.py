@@ -21,12 +21,18 @@ class BERTopicModeler:
         """Train BERTopic model."""
         self.documents = documents
         
-        # Configure vectorizer
+        # Configure vectorizer with adaptive parameters for small datasets
+        n_docs = len(documents)
+        min_df = 1  # Always allow terms in at least 1 document
+        # For small datasets, allow terms in all documents; for larger datasets, 95% max
+        max_df = n_docs if n_docs < 5 else int(0.95 * n_docs) + 1
+        
         vectorizer_model = CountVectorizer(
             stop_words="english",
-            max_features=1000,
-            min_df=2,
-            max_df=0.95
+            max_features=None,  # Don't limit features for small datasets
+            min_df=min_df,
+            max_df=max_df,
+            token_pattern=r"(?u)\b[a-z]{2,}\b"  # Only words with 2+ chars
         )
         
         # Initialize and train model
@@ -58,9 +64,9 @@ class BERTopicModeler:
         topics_dict = {}
         for topic_id, topic_info in self.model.get_topics().items():
             if topic_id != -1:  # Exclude outliers
-                topics_dict[topic_id] = {
-                    'keywords': [word for word, _ in topic_info[:5]],
-                    'word_weights': [weight for _, weight in topic_info[:5]]
+                topics_dict[int(topic_id)] = {
+                    'keywords': [str(word) for word, _ in topic_info[:5]],
+                    'word_weights': [float(weight) for _, weight in topic_info[:5]]
                 }
         
         return topics_dict
@@ -83,10 +89,10 @@ class BERTopicModeler:
         for topic_id, similarity in similar_topics:
             if topic_id != -1:
                 topic_info = self.model.get_topics()[topic_id]
-                keywords = [word for word, _ in topic_info[:5]]
-                results[topic_id] = {
+                keywords = [str(word) for word, _ in topic_info[:5]]
+                results[int(topic_id)] = {
                     'keywords': keywords,
-                    'similarity': similarity
+                    'similarity': float(similarity)
                 }
         
         return results
@@ -98,10 +104,10 @@ class BERTopicModeler:
         
         assignments = {}
         for idx, topic_id in enumerate(self.topics):
-            assignments[idx] = {
-                'document': self.documents[idx][:100],
-                'topic_id': topic_id,
-                'probability': float(self.probabilities[idx].max()) if self.probabilities is not None else None
+            assignments[int(idx)] = {
+                'document': self.documents[int(idx)][:100],
+                'topic_id': int(topic_id),
+                'probability': float(self.probabilities[int(idx)].max()) if self.probabilities is not None else None
             }
         
         return assignments
@@ -115,8 +121,8 @@ class BERTopicModeler:
         distribution = {}
         
         for topic_id, count in zip(unique, counts):
-            percentage = (count / len(self.topics)) * 100
-            distribution[topic_id] = {
+            percentage = (float(count) / len(self.topics)) * 100
+            distribution[int(topic_id)] = {
                 'count': int(count),
                 'percentage': round(percentage, 2)
             }

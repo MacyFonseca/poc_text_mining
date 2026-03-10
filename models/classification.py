@@ -54,19 +54,32 @@ class TextClassifier:
 
     def prepare_data(self, texts: List[str], labels: List[int]) -> 'TextClassifier':
         """Prepare and vectorize text data."""
-        # Vectorize texts
+        # Configure vectorizer with adaptive parameters for small datasets
+        n_docs = len(texts)
+        min_df = 1  # Always allow terms in at least 1 document
+        # For small datasets, allow terms in all documents; for larger datasets, 95% max
+        max_df = n_docs if n_docs < 5 else int(0.95 * n_docs) + 1
+        
         self.vectorizer = TfidfVectorizer(
-            max_features=1000,
-            min_df=2,
-            max_df=0.95,
-            stop_words='english'
+            max_features=None,  # Don't limit features for small datasets
+            min_df=min_df,
+            max_df=max_df,
+            stop_words='english',
+            token_pattern=r"(?u)\b[a-z]{2,}\b"  # Only words with 2+ chars
         )
         X = self.vectorizer.fit_transform(texts).toarray()
+        
+        # Adaptive test size for small datasets
+        n_samples = len(texts)
+        unique_labels = len(set(labels))
+        # For small datasets, use smaller test size (min 1 sample * num_classes)
+        min_test_samples = max(1, unique_labels)
+        test_size = max(min_test_samples / n_samples, self.config.test_size)
         
         # Split data
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, labels,
-            test_size=self.config.test_size,
+            test_size=test_size,
             random_state=self.config.random_state,
             stratify=labels
         )
