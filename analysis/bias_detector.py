@@ -47,19 +47,25 @@ class BiasDetector:
         """Detect gender bias in text."""
         text_lower = text.lower()
         
-        male_count = sum(1 for keyword in self.gender_bias_keywords['male_biased'] 
-                        if keyword in text_lower)
-        female_count = sum(1 for keyword in self.gender_bias_keywords['female_biased'] 
-                          if keyword in text_lower)
+        # Collect actual keywords found
+        male_keywords = [keyword for keyword in self.gender_bias_keywords['male_biased'] 
+                        if keyword in text_lower]
+        female_keywords = [keyword for keyword in self.gender_bias_keywords['female_biased'] 
+                          if keyword in text_lower]
         
+        male_count = len(male_keywords)
+        female_count = len(female_keywords)
         total = male_count + female_count
+        
         if total == 0:
             return {
                 'has_gender_bias': False,
                 'male_bias_score': 0.0,
                 'female_bias_score': 0.0,
                 'bias_direction': 'neutral',
-                'confidence': 1.0
+                'confidence': 1.0,
+                'male_keywords_found': [],
+                'female_keywords_found': []
             }
         
         male_ratio = male_count / total
@@ -80,8 +86,8 @@ class BiasDetector:
             'male_bias_score': male_ratio,
             'female_bias_score': female_ratio,
             'bias_direction': bias_direction,
-            'male_keywords_found': male_count,
-            'female_keywords_found': female_count,
+            'male_keywords_found': male_keywords,
+            'female_keywords_found': female_keywords,
             'confidence': max(male_ratio, female_ratio)
         }
 
@@ -100,10 +106,6 @@ class BiasDetector:
             }
         
         return results
-
-
-
-
 
     def ml_based_bias_detection(self, text: str, categories: List[str]) -> Dict:
         """Use zero-shot classification for bias detection."""
@@ -161,8 +163,10 @@ class BiasDetector:
         gb = analysis['gender_bias']
         report.append(f"\nGender Bias Analysis:")
         report.append(f"  - Direction: {gb['bias_direction'].upper()}")
-        report.append(f"  - Male Keywords: {gb['male_keywords_found']}")
-        report.append(f"  - Female Keywords: {gb['female_keywords_found']}")
+        if gb['male_keywords_found']:
+            report.append(f"  - Male Keywords: {', '.join(gb['male_keywords_found'])}")
+        if gb['female_keywords_found']:
+            report.append(f"  - Female Keywords: {', '.join(gb['female_keywords_found'])}")
         
         # Discriminatory language
         report.append(f"\nDiscriminatory Language:")
