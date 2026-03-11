@@ -142,18 +142,30 @@ class BiasDetector:
             'discriminatory_language': self.detect_discriminatory_language(text)
         }
         
-        # Calculate overall bias score
-        gender_score = analysis['gender_bias']['confidence']
-        discriminatory_scores = [
-            v['count'] for v in analysis['discriminatory_language'].values()
-        ]
+        # Check if any discriminatory language is present
+        has_discriminatory = any(
+            v['has_discriminatory_language'] 
+            for v in analysis['discriminatory_language'].values()
+        )
+        
+        # Calculate overall bias score based on actual bias detection
+        # Only count gender score if gender bias is actually detected
+        if analysis['gender_bias']['has_gender_bias']:
+            gender_score = analysis['gender_bias']['confidence']
+        else:
+            gender_score = 0.0
+        
+        # Discriminatory language score: 1.0 if present, 0.0 if absent
+        discriminatory_score = 1.0 if has_discriminatory else 0.0
+        
         overall_bias_score = (
             gender_score * 0.6 +
-            (min(sum(discriminatory_scores), 5) / 5) * 0.4  # Normalize discriminatory
+            discriminatory_score * 0.4
         )
         
         analysis['overall_bias_score'] = min(overall_bias_score, 1.0)
-        analysis['is_biased'] = analysis['overall_bias_score'] > 0.5
+        # A text is biased only if it has gender bias or discriminatory language
+        analysis['is_biased'] = analysis['gender_bias']['has_gender_bias'] or has_discriminatory
         
         return analysis
 
