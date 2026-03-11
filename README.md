@@ -32,8 +32,6 @@ This repository implements a sophisticated text mining and NLP solution that com
 ### 2. Bias Detection  
 - Gender bias identification (male/female keyword analysis)
 - Discriminatory language detection (age, race, disability, appearance)
-- Sentiment and tone analysis
-- Toxic language detection using transformer models
 - ML-based zero-shot classification for bias patterns
 
 ### 3. Topic Modeling
@@ -187,8 +185,6 @@ guidance = engine.generate_guidance(text, analyses)
 - Overall bias score (0.0 - 1.0)
 - Gender bias direction (male/female/balanced)
 - Discriminatory language categories
-- Sentiment analysis
-- Toxic language detection
 
 ### Topic Analysis
 - Topics identified with keywords

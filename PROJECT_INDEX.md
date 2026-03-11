@@ -284,8 +284,6 @@ results = pipeline.run_full_pipeline(documents)
 ```
 detect_gender_bias()
 detect_discriminatory_language()
-sentiment_and_tone_analysis()
-toxic_language_detection()
 ml_based_bias_detection()
 comprehensive_bias_analysis()
 batch_analysis()

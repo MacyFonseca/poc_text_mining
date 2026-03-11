@@ -25,8 +25,6 @@ This project implements a sophisticated text mining and natural language process
 ### 2. **Bias Detection**
 - Gender bias detection (male/female keyword analysis)
 - Discriminatory language identification (age, race, disability, appearance)
-- Sentiment analysis
-- Toxic language detection using transformer models
 - ML-based zero-shot classification for bias patterns
 
 ### 3. **Topic Modeling**
@@ -226,8 +224,6 @@ cleaned_text = preprocessor.preprocess("Your text here...")
 **BiasDetector** class provides:
 - Gender bias detection
 - Discriminatory language identification
-- Sentiment analysis
-- Toxic language detection
 - Zero-shot classification for bias patterns
 - Comprehensive bias reports
 

@@ -17,7 +17,7 @@ A **comprehensive machine learning pipeline** for text mining and bias detection
 | Component | Technology | Features |
 |-----------|-----------|----------|
 | **Text Processing** | NLTK, spaCy | Tokenization, lemmatization, POS tagging, NER |
-| **Bias Detection** | Transformers, BERT | Gender bias, discriminatory language, sentiment, toxicity |
+| **Bias Detection** | Transformers, BERT | Gender bias, discriminatory language |
 | **Topic Modeling** | BERTopic | Semantic topics, distribution, representatives |
 | **Clustering** | scikit-learn | KMeans, Agglomerative, DBSCAN |
 | **Classification** | scikit-learn | LogisticRegression, RandomForest, SVM |
@@ -93,7 +93,6 @@ ClusteringConfig → ClassificationConfig → DecisionEngineConfig
 - **BiasDetector**: 417 lines
 - Keyword-based gender bias
 - Discriminatory language detection (5 categories)
-- Sentiment & toxic language analysis
 - Zero-shot ML classification
 - Comprehensive bias reports
 
@@ -192,8 +191,6 @@ jupyter notebook notebooks/text_mining_analysis.ipynb
 **Bias Detection**:
 - ✓ Gender bias (male/female ratio analysis)
 - ✓ Discriminatory language (5 categories)
-- ✓ Sentiment analysis
-- ✓ Toxic language detection
 - ✓ ML-based zero-shot classification
 
 **Machine Learning**:

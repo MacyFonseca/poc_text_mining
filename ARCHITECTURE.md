@@ -95,8 +95,6 @@ The Text Mining and Bias Detection Pipeline is built with a modular, layered arc
 **Main Methods**:
 - `detect_gender_bias()` - Gender bias analysis
 - `detect_discriminatory_language()` - Discriminatory term detection
-- `sentiment_and_tone_analysis()` - Sentiment scoring
-- `toxic_language_detection()` - Toxic content detection
 - `ml_based_bias_detection()` - Zero-shot classification
 - `comprehensive_bias_analysis()` - Full pipeline analysis
 - `batch_analysis()` - Process multiple texts
@@ -104,9 +102,7 @@ The Text Mining and Bias Detection Pipeline is built with a modular, layered arc
 
 **Detection Methods**:
 1. **Keyword-based**: Manual keyword lists for gender and discriminatory terms
-2. **Sentiment Analysis**: Using transformer models
-3. **Toxic Language**: NSFW text classifier
-4. **Zero-shot Classification**: BART for pattern matching
+2. **Zero-shot Classification**: BART for pattern matching
 
 **Output**: Bias scores, detected patterns, confidence levels
 
@@ -338,7 +334,6 @@ Data Handling:
 ### Model Dependencies
 ```
 Bias Detection:
-  - BERT models (sentiment, toxic text)
   - Zero-shot classification models
 
 Topic Modeling:
