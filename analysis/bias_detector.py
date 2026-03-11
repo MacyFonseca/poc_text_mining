@@ -1,4 +1,5 @@
 """Bias detection using transformer models and custom heuristics."""
+import re
 import numpy as np
 from typing import Dict, List, Tuple
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
@@ -47,11 +48,18 @@ class BiasDetector:
         """Detect gender bias in text."""
         text_lower = text.lower()
         
-        # Collect actual keywords found
-        male_keywords = [keyword for keyword in self.gender_bias_keywords['male_biased'] 
-                        if keyword in text_lower]
-        female_keywords = [keyword for keyword in self.gender_bias_keywords['female_biased'] 
-                          if keyword in text_lower]
+        # Collect actual keywords found using exact word matching
+        male_keywords = []
+        for keyword in self.gender_bias_keywords['male_biased']:
+            # Use word boundaries to match whole words only
+            if re.search(r'\b' + re.escape(keyword) + r'\b', text_lower):
+                male_keywords.append(keyword)
+        
+        female_keywords = []
+        for keyword in self.gender_bias_keywords['female_biased']:
+            # Use word boundaries to match whole words only
+            if re.search(r'\b' + re.escape(keyword) + r'\b', text_lower):
+                female_keywords.append(keyword)
         
         male_count = len(male_keywords)
         female_count = len(female_keywords)
@@ -97,7 +105,11 @@ class BiasDetector:
         results = {}
         
         for category, keywords in self.discriminatory_keywords.items():
-            found_keywords = [kw for kw in keywords if kw in text_lower]
+            found_keywords = []
+            for kw in keywords:
+                # Use word boundaries to match whole words only
+                if re.search(r'\b' + re.escape(kw) + r'\b', text_lower):
+                    found_keywords.append(kw)
             has_discriminatory = len(found_keywords) > 0
             results[category] = {
                 'has_discriminatory_language': has_discriminatory,
