@@ -101,36 +101,9 @@ class BiasDetector:
         
         return results
 
-    def sentiment_and_tone_analysis(self, text: str) -> Dict:
-        """Analyze sentiment and tone that might indicate bias."""
-        try:
-            sentiment_pipeline = pipeline("sentiment-analysis")
-            result = sentiment_pipeline(text[:512])  # Limit to 512 tokens
-            
-            return {
-                'label': result[0]['label'],
-                'score': result[0]['score']
-            }
-        except Exception as e:
-            print(f"Error in sentiment analysis: {e}")
-            return {'label': 'NEUTRAL', 'score': 0.5}
 
-    def toxic_language_detection(self, text: str) -> Dict:
-        """Detect potentially toxic or harmful language."""
-        try:
-            toxic_pipeline = pipeline(
-                "text-classification",
-                model="michellejieli/NSFW_text_classifier"
-            )
-            result = toxic_pipeline(text[:512])
-            
-            return {
-                'label': result[0]['label'],
-                'score': result[0]['score']
-            }
-        except Exception as e:
-            print(f"Error in toxic language detection: {e}")
-            return {'label': 'clean', 'score': 0.5}
+
+
 
     def ml_based_bias_detection(self, text: str, categories: List[str]) -> Dict:
         """Use zero-shot classification for bias detection."""
@@ -152,9 +125,7 @@ class BiasDetector:
         analysis = {
             'text': text[:200],  # Store first 200 chars
             'gender_bias': self.detect_gender_bias(text),
-            'discriminatory_language': self.detect_discriminatory_language(text),
-            'sentiment': self.sentiment_and_tone_analysis(text),
-            'toxic_language': self.toxic_language_detection(text)
+            'discriminatory_language': self.detect_discriminatory_language(text)
         }
         
         # Calculate overall bias score
@@ -163,9 +134,8 @@ class BiasDetector:
             v['count'] for v in analysis['discriminatory_language'].values()
         ]
         overall_bias_score = (
-            gender_score * 0.4 +
-            (min(sum(discriminatory_scores), 5) / 5) * 0.3 +  # Normalize discriminatory
-            (1.0 if analysis['toxic_language']['label'] == 'nsfw' else 0.0) * 0.3
+            gender_score * 0.6 +
+            (min(sum(discriminatory_scores), 5) / 5) * 0.4  # Normalize discriminatory
         )
         
         analysis['overall_bias_score'] = min(overall_bias_score, 1.0)
@@ -199,8 +169,5 @@ class BiasDetector:
         for category, data in analysis['discriminatory_language'].items():
             if data['count'] > 0:
                 report.append(f"  - {category.upper()}: {', '.join(data['keywords_found'])}")
-        
-        # Sentiment
-        report.append(f"\nSentiment: {analysis['sentiment']['label']} ({analysis['sentiment']['score']:.2%})")
         
         return '\n'.join(report)

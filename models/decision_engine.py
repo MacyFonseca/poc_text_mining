@@ -63,20 +63,6 @@ class DecisionEngine:
                     'Standard language review',
                     'Maintain inclusivity'
                 ]
-            },
-            'toxic_language': {
-                'high': [
-                    'Replace all harmful language',
-                    'Rewrite section with respectful tone',
-                    'Add content moderation review'
-                ],
-                'medium': [
-                    'Review for tone and respect',
-                    'Consider alternative wording'
-                ],
-                'low': [
-                    'Standard quality check'
-                ]
             }
         }
 
@@ -125,10 +111,7 @@ class DecisionEngine:
                 )
                 break
         
-        if bias_analysis['toxic_language']['label'] == 'nsfw':
-            recommendations.extend(
-                self.action_recommendations['toxic_language'].get(severity, [])
-            )
+
         
         # Determine priority
         if score >= 0.8:
