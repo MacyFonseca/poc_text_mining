@@ -169,56 +169,7 @@ def main():
     return pipeline
 
 
-def analyze_single_text(text: str):
-    """Analyze a single text for bias."""
-    print("\n" + "=" * 70)
-    print("SINGLE TEXT BIAS ANALYSIS")
-    print("=" * 70 + "\n")
-    
-    # Initialize just bias detection
-    from analysis.bias_detector import BiasDetector
-    
-    detector = BiasDetector()
-    analysis = detector.comprehensive_bias_analysis(text)
-    
-    print(detector.generate_bias_report(analysis))
-    print(f"\nOverall Bias Score: {analysis['overall_bias_score']:.2%}")
-    print(f"Is Biased: {analysis['is_biased']}")
-
-
-def interactive_analysis():
-    """Interactive mode for analyzing custom text."""
-    print("\n" + "=" * 70)
-    print("INTERACTIVE TEXT ANALYSIS MODE")
-    print("=" * 70)
-    print("\nEnter text to analyze (type 'quit' to exit):\n")
-    
-    from analysis.bias_detector import BiasDetector
-    
-    detector = BiasDetector()
-    
-    while True:
-        text = input("\nEnter text: ").strip()
-        
-        if text.lower() == 'quit':
-            print("Exiting...")
-            break
-        
-        if not text:
-            continue
-        
-        analysis = detector.comprehensive_bias_analysis(text)
-        print(detector.generate_bias_report(analysis))
-
-
 if __name__ == "__main__":
     # Example 1: Run full pipeline with sample data
     pipeline = main()
-    
-    # Example 2: Analyze a single custom text
-    custom_text = ("We are looking for a talented individual with strong communication skills. "
-                   "We welcome applications from all qualified candidates.")
-    analyze_single_text(custom_text)
-    
-    # Example 3: Interactive analysis (uncomment to use)
-    # interactive_analysis()
+
