@@ -1,7 +1,15 @@
 """Configuration management for text mining pipeline."""
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
+import torch
+
+
+def get_optimal_device() -> str:
+    """Auto-detect optimal device (CUDA if available, else CPU)."""
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
 
 
 @dataclass
@@ -19,7 +27,7 @@ class TextPreprocessingConfig:
 class BiasDetectionConfig:
     """Configuration for bias detection."""
     model_name: str = "bert-base-uncased"
-    device: str = "cuda"
+    device: str = field(default_factory=get_optimal_device)
     batch_size: int = 16
     max_length: int = 512
     threshold: float = 0.5
