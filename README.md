@@ -75,19 +75,29 @@ python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk
 python -m spacy download en_core_web_sm
 ```
 
-### Basic Usage
+### Basic Usage - Full Pipeline
 ```python
 from pipelines.text_mining_pipeline import TextMiningPipeline
+from config.settings import PipelineConfig
 
 # Your documents
 documents = ["Research project text 1...", "Research project text 2..."]
 
-# Run analysis
+# Initialize pipeline (auto-configures for available hardware)
 pipeline = TextMiningPipeline()
-results = pipeline.run_full_pipeline(documents)
 
-# Generate report
-print(pipeline.generate_report())
+# Load and process documents
+pipeline.load_documents(documents)
+pipeline.preprocess()
+pipeline.detect_bias()
+pipeline.topic_modeling()
+pipeline.clustering()
+pipeline.decision_making()
+
+# Get results
+results = pipeline.get_results()
+print(f"Biased documents found: {results['bias_detection']['biased_documents']}")
+print(f"Topics identified: {results['topic_modeling']['num_topics']}")
 
 # Export results
 pipeline.export_results('results.json', format='json')
@@ -99,7 +109,152 @@ python example_analysis.py
 jupyter notebook notebooks/text_mining_analysis.ipynb
 ```
 
-## 📊 Project Structure
+## � Detailed Usage Examples
+
+### Example 1: Detect Gender Bias in Job Postings
+```python
+from analysis.bias_detector import BiasDetector
+
+detector = BiasDetector(device='cpu')
+
+# Analyze job posting
+job_posting = """
+We are looking for a strong male engineer to lead our technical team.
+The ideal candidate should be aggressive in pursuing technical excellence.
+We prefer ambitious professionals who can take charge.
+"""
+
+analysis = detector.comprehensive_bias_analysis(job_posting)
+
+# Check results
+if analysis['is_biased']:
+    print(f"⚠️  Bias detected: {analysis['overall_bias_score']:.1%}")
+    print(f"Type: Gender bias ({analysis['gender_bias']['bias_direction']}-biased)")
+    print(f"Confidence: {analysis['gender_bias']['confidence']:.1%}")
+    
+    # Show evidence
+    for evidence in analysis['gender_bias']['male_evidence']:
+        print(f"  Evidence: {evidence}")
+```
+
+### Example 2: Analyze Multiple Documents for Biases
+```python
+from analysis.bias_detector import BiasDetector
+
+documents = [
+    "We seek a talented engineer with strong problem-solving skills.",
+    "Beautiful young woman needed for customer relations role.",
+    "Experienced professional for leadership position. Equal opportunities.",
+    "Seeking energetic employees aged 25-35 for startup team.",
+]
+
+detector = BiasDetector(device='cpu')
+results = detector.batch_analysis(documents)
+
+# Summary statistics
+biased_count = sum(1 for r in results if r['is_biased'])
+print(f"Biased documents: {biased_count}/{len(documents)}")
+
+for i, result in enumerate(results, 1):
+    print(f"\nDocument {i}:")
+    print(f"  Biased: {result['is_biased']}")
+    print(f"  Score: {result['overall_bias_score']:.1%}")
+    print(f"  Gender Bias: {result['gender_bias']['has_gender_bias']}")
+    
+    # Show discriminatory language
+    for category, data in result['discriminatory_language'].items():
+        if data['has_discriminatory_language']:
+            print(f"  ⚠️  {category}: {data['confidence_score']:.1%}")
+```
+
+### Example 3: Full Pipeline with Bias Analysis
+```python
+from pipelines.text_mining_pipeline import TextMiningPipeline
+
+# Research project descriptions
+documents = [
+    "Male-led research in AI and software engineering...",
+    "Dynamic team working on innovative cloud solutions...",
+    "Need strong, aggressive project leaders...",
+]
+
+pipeline = TextMiningPipeline()
+pipeline.load_documents(documents)
+
+# Preprocess documents
+pipeline.preprocess()
+
+# Detect bias
+pipeline.detect_bias()
+bias_results = pipeline.results['bias_detection']
+print(f"Found {bias_results['biased_documents']} biased documents")
+print(f"Average bias score: {bias_results['average_bias_score']:.1%}")
+
+# Continue with other analyses
+pipeline.topic_modeling()
+pipeline.clustering()
+
+# Export all results
+pipeline.export_results('analysis_results.json', format='json')
+```
+
+### Example 4: Generate Bias Reports
+```python
+from analysis.bias_detector import BiasDetector
+
+detector = BiasDetector(device='cpu')
+
+text = """
+The successful male candidate will lead our engineering team.
+We need someone decisive and competitive in market negotiations.
+Nursing and administrative support staff welcome.
+"""
+
+analysis = detector.comprehensive_bias_analysis(text)
+
+# Generate detailed report
+report = detector.generate_bias_report(analysis)
+print(report)
+
+# Access structured results
+print("\n=== STRUCTURED ANALYSIS ===")
+print(f"Overall Bias Score: {analysis['overall_bias_score']:.1%}")
+print(f"Gender Bias Detected: {analysis['gender_bias']['has_gender_bias']}")
+print(f"Gender Direction: {analysis['gender_bias']['bias_direction']}")
+print(f"Confidence: {analysis['gender_bias']['confidence']:.1%}")
+
+# Show all detected discrimination types
+detected_categories = analysis['bias_summary']['discriminatory_categories']
+if detected_categories:
+    print(f"Discriminatory Categories: {', '.join(detected_categories)}")
+else:
+    print("No discriminatory language detected")
+```
+
+### Example 5: Custom Configuration
+```python
+from pipelines.text_mining_pipeline import TextMiningPipeline
+from config.settings import PipelineConfig, BiasDetectionConfig
+
+# Create custom configuration
+bias_config = BiasDetectionConfig(
+    device='cpu',  # or 'cuda' for GPU
+    batch_size=16,
+    max_length=512
+)
+
+config = PipelineConfig(
+    bias_detection=bias_config,
+    random_state=42
+)
+
+# Use custom config
+pipeline = TextMiningPipeline(config)
+pipeline.load_documents(documents)
+pipeline.detect_bias()
+```
+
+## �📊 Project Structure
 
 ```
 poc_text_mining/
@@ -147,9 +302,27 @@ cleaned = preprocessor.preprocess("text here")
 ```python
 from analysis.bias_detector import BiasDetector
 
-detector = BiasDetector()
-analysis = detector.comprehensive_bias_analysis("text")
-print(detector.generate_bias_report(analysis))
+# Initialize detector (auto-detects optimized device: GPU or CPU)
+detector = BiasDetector(device='cpu')
+
+# Analyze text for bias
+text = "The male engineer led the project while the female nurse provided support."
+analysis = detector.comprehensive_bias_analysis(text)
+
+# Access results
+print(f"Is Biased: {analysis['is_biased']}")
+print(f"Bias Score: {analysis['overall_bias_score']:.2%}")
+print(f"Gender Bias: {analysis['gender_bias']['has_gender_bias']}")
+print(f"Direction: {analysis['gender_bias']['bias_direction']}")
+print(f"Confidence: {analysis['gender_bias']['confidence']:.2%}")
+
+# Generate detailed report
+report = detector.generate_bias_report(analysis)
+print(report)
+
+# Batch processing multiple texts
+texts = ["text 1", "text 2", "text 3"]
+results = detector.batch_analysis(texts)
 ```
 
 ### BERTopicModeler
@@ -182,9 +355,11 @@ guidance = engine.generate_guidance(text, analyses)
 ## 📈 Example Output
 
 ### Bias Detection
-- Overall bias score (0.0 - 1.0)
-- Gender bias direction (male/female/balanced)
-- Discriminatory language categories
+- Overall bias score (0.0 - 1.0) with confidence metrics
+- Gender bias direction (male/female/balanced/mixed)
+- Discriminatory language categories (age, race, disability, appearance)
+- Evidence windows showing where bias was detected
+- Semantic similarity scores for each bias pattern
 
 ### Topic Analysis
 - Topics identified with keywords
@@ -206,17 +381,25 @@ from config.settings import PipelineConfig, BiasDetectionConfig, TopicModelingCo
 
 config = PipelineConfig(
     bias_detection=BiasDetectionConfig(
-        model_name="bert-base-cased",
+        model_name="bert-base-uncased",
+        device='cpu',  # Auto-detects GPU if available, falls back to CPU
         batch_size=32
     ),
     topic_modeling=TopicModelingConfig(
         min_topic_size=5,
         nr_topics=10
-    )
+    ),
+    random_state=42
 )
 
 pipeline = TextMiningPipeline(config)
 ```
+
+### Device Auto-Detection
+The pipeline automatically detects available hardware:
+- Uses CUDA GPU if NVIDIA GPU is available
+- Falls back to CPU if GPU is not available
+- Optimizes model loading for detected device
 
 ## 📖 Documentation
 
