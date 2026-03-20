@@ -33,6 +33,6 @@ pip-selfcheck.json
 # End of https://www.toptal.com/developers/gitignore/api/linux,venv
 
 __pycache__/
-output/
+output*/
 venv/
 data/
