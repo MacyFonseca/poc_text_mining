@@ -11,20 +11,9 @@ warnings.filterwarnings('ignore')
 class BiasDetector:
     """Detect gender bias and discriminatory language in text."""
 
-    def __init__(self, model_name: str = "bert-base-uncased", device: str = "cuda"):
-        """Initialize bias detector with transformer model."""
-        self.model_name = model_name
-        self.device = 0 if device == "cuda" else -1
-        
-        # Initialize zero-shot classification for bias detection
-        self.classifier = pipeline(
-            "zero-shot-classification",
-            model="facebook/bart-large-mnli",
-            device=self.device
-        )
-        
-        # Bias detection keywords
-        self.gender_bias_keywords = {
+    # Keyword dictionaries per language
+    GENDER_BIAS_KEYWORDS = {
+        'english': {
             'male_biased': [
                 'he', 'his', 'him', 'man', 'men', 'boy', 'male',
                 'leader', 'manager', 'engineer', 'scientist',
@@ -35,14 +24,57 @@ class BiasDetector:
                 'nurse', 'secretary', 'assistant', 'support',
                 'beautiful', 'emotional', 'nurturing', 'caring'
             ]
+        },
+        'spanish': {
+            'male_biased': [
+                'él', 'su', 'hombre', 'hombres', 'chico', 'masculino', 'varón',
+                'líder', 'gerente', 'ingeniero', 'científico',
+                'fuerte', 'agresivo', 'ambicioso', 'lógico'
+            ],
+            'female_biased': [
+                'ella', 'su', 'mujer', 'mujeres', 'chica', 'femenina', 'femenino',
+                'enfermera', 'secretaria', 'asistenta', 'apoyo',
+                'hermosa', 'emocional', 'maternal', 'cariñosa'
+            ]
         }
-        
-        self.discriminatory_keywords = {
+    }
+
+    DISCRIMINATORY_KEYWORDS = {
+        'english': {
             'age': ['young', 'old', 'elderly', 'millennial', 'boomer'],
             'race': ['diverse', 'minority', 'immigrant'],
             'disability': ['disabled', 'handicapped', 'special needs'],
             'appearance': ['attractive', 'overweight', 'skinny']
+        },
+        'spanish': {
+            'age': ['joven', 'viejo', 'anciano', 'millennial', 'boomer'],
+            'race': ['diverso', 'minoría', 'inmigrante'],
+            'disability': ['discapacitado', 'minusválido', 'necesidades especiales'],
+            'appearance': ['atractivo', 'sobrepeso', 'delgado']
         }
+    }
+
+    def __init__(self, model_name: str = "bert-base-uncased", device: str = "cuda",
+                 language: str = "english"):
+        """Initialize bias detector with transformer model."""
+        self.model_name = model_name
+        self.device = 0 if device == "cuda" else -1
+        self.language = language
+        
+        # Initialize zero-shot classification for bias detection
+        self.classifier = pipeline(
+            "zero-shot-classification",
+            model="facebook/bart-large-mnli",
+            device=self.device
+        )
+        
+        # Select keywords for the configured language
+        self.gender_bias_keywords = self.GENDER_BIAS_KEYWORDS.get(
+            language, self.GENDER_BIAS_KEYWORDS['english']
+        )
+        self.discriminatory_keywords = self.DISCRIMINATORY_KEYWORDS.get(
+            language, self.DISCRIMINATORY_KEYWORDS['english']
+        )
 
     def detect_gender_bias(self, text: str) -> Dict:
         """Detect gender bias in text."""
@@ -137,7 +169,7 @@ class BiasDetector:
     def comprehensive_bias_analysis(self, text: str) -> Dict:
         """Comprehensive bias analysis combining multiple techniques."""
         analysis = {
-            'text': text[:200],  # Store first 200 chars
+            'text': text,
             'gender_bias': self.detect_gender_bias(text),
             'discriminatory_language': self.detect_discriminatory_language(text)
         }

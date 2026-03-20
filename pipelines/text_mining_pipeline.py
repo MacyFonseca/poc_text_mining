@@ -22,11 +22,12 @@ class TextMiningPipeline:
         self.preprocessor = TextPreprocessor(self.config.preprocessing)
         self.bias_detector = BiasDetector(
             model_name=self.config.bias_detection.model_name,
-            device=self.config.bias_detection.device
+            device=self.config.bias_detection.device,
+            language=self.config.language
         )
         self.topic_modeler = BERTopicModeler(self.config.topic_modeling)
-        self.clusterer = DocumentClusterer(self.config.clustering)
-        self.classifier = TextClassifier(self.config.classification)
+        self.clusterer = DocumentClusterer(self.config.clustering, language=self.config.language)
+        self.classifier = TextClassifier(self.config.classification, language=self.config.language)
         self.decision_engine = DecisionEngine(self.config.decision_engine)
         
         # Results storage

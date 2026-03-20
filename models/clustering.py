@@ -5,15 +5,22 @@ from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+from nltk.corpus import stopwords as nltk_stopwords
 from config.settings import ClusteringConfig
 
 
 class DocumentClusterer:
     """Document clustering using various algorithms."""
 
-    def __init__(self, config: ClusteringConfig):
+    def __init__(self, config: ClusteringConfig, language: str = "english"):
         """Initialize clusterer."""
         self.config = config
+        self.language = language
+        # sklearn only supports 'english' natively; use NLTK list for others
+        if language == 'english':
+            self._stop_words = 'english'
+        else:
+            self._stop_words = list(nltk_stopwords.words(language))
         self.documents = None
         self.vectorizer = None
         self.features = None
@@ -32,8 +39,8 @@ class DocumentClusterer:
             max_features=None,  # Don't limit features for small datasets
             min_df=min_df,
             max_df=max_df,
-            stop_words='english',
-            token_pattern=r"(?u)\b[a-z]{2,}\b"  # Only words with 2+ chars
+            stop_words=self._stop_words,
+            token_pattern=r"(?u)\b\w{2,}\b"  # Words with 2+ chars (supports accented chars)
         )
         self.features = self.vectorizer.fit_transform(documents).toarray()
         return self.features

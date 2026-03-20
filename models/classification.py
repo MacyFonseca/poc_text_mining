@@ -10,15 +10,22 @@ from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     confusion_matrix, classification_report, roc_auc_score
 )
+from nltk.corpus import stopwords as nltk_stopwords
 from config.settings import ClassificationConfig
 
 
 class TextClassifier:
     """Classification model for bias detection."""
 
-    def __init__(self, config: ClassificationConfig):
+    def __init__(self, config: ClassificationConfig, language: str = "english"):
         """Initialize classifier."""
         self.config = config
+        self.language = language
+        # sklearn only supports 'english' natively; use NLTK list for others
+        if language == 'english':
+            self._stop_words = 'english'
+        else:
+            self._stop_words = list(nltk_stopwords.words(language))
         self.vectorizer = None
         self.models = {}
         self.X_train = None
@@ -64,8 +71,8 @@ class TextClassifier:
             max_features=None,  # Don't limit features for small datasets
             min_df=min_df,
             max_df=max_df,
-            stop_words='english',
-            token_pattern=r"(?u)\b[a-z]{2,}\b"  # Only words with 2+ chars
+            stop_words=self._stop_words,
+            token_pattern=r"(?u)\b\w{2,}\b"  # Words with 2+ chars (supports accented chars)
         )
         X = self.vectorizer.fit_transform(texts).toarray()
         

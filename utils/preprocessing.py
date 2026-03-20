@@ -7,7 +7,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.stem import WordNetLemmatizer
 import spacy
-from config.settings import TextPreprocessingConfig
+from config.settings import TextPreprocessingConfig, SPACY_MODELS
 
 # Download required NLTK data
 try:
@@ -37,15 +37,24 @@ class TextPreprocessor:
     def __init__(self, config: TextPreprocessingConfig):
         """Initialize preprocessor with configuration."""
         self.config = config
-        self.lemmatizer = WordNetLemmatizer()
         self.stopwords_set = set(stopwords.words(config.language))
+
+        # Load language-specific spacy model
+        spacy_model = SPACY_MODELS.get(config.language, 'en_core_web_sm')
         try:
-            self.nlp = spacy.load('en_core_web_sm')
+            self.nlp = spacy.load(spacy_model)
         except OSError:
-            print("Downloading spacy model...")
+            print(f"Downloading spacy model {spacy_model}...")
             import os
-            os.system('python -m spacy download en_core_web_sm')
-            self.nlp = spacy.load('en_core_web_sm')
+            os.system(f'python -m spacy download {spacy_model}')
+            self.nlp = spacy.load(spacy_model)
+
+        # Use WordNet lemmatizer for English, spacy lemmatizer for others
+        if config.language == 'english':
+            self.lemmatizer = WordNetLemmatizer()
+            self._lemmatize_tokens = self._lemmatize_wordnet
+        else:
+            self._lemmatize_tokens = self._lemmatize_spacy
 
     def clean_text(self, text: str) -> str:
         """Clean text by removing unwanted characters."""
@@ -84,8 +93,17 @@ class TextPreprocessor:
         return tokens
 
     def lemmatize(self, tokens: List[str]) -> List[str]:
-        """Lemmatize tokens."""
+        """Lemmatize tokens using the appropriate method for the configured language."""
+        return self._lemmatize_tokens(tokens)
+
+    def _lemmatize_wordnet(self, tokens: List[str]) -> List[str]:
+        """Lemmatize tokens using WordNet (English)."""
         return [self.lemmatizer.lemmatize(token) for token in tokens]
+
+    def _lemmatize_spacy(self, tokens: List[str]) -> List[str]:
+        """Lemmatize tokens using spacy (multilingual)."""
+        doc = self.nlp(' '.join(tokens))
+        return [token.lemma_ for token in doc]
 
     def filter_by_length(self, tokens: List[str]) -> List[str]:
         """Filter tokens by minimum length."""

@@ -3,6 +3,7 @@ from typing import List, Tuple, Dict, Optional
 import numpy as np
 from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
+from nltk.corpus import stopwords as nltk_stopwords
 from config.settings import TopicModelingConfig
 
 
@@ -12,6 +13,11 @@ class BERTopicModeler:
     def __init__(self, config: TopicModelingConfig):
         """Initialize BERTopic modeler."""
         self.config = config
+        # sklearn only supports 'english' natively; use NLTK list for others
+        if config.language == 'english':
+            self._stop_words = 'english'
+        else:
+            self._stop_words = list(nltk_stopwords.words(config.language))
         self.model: Optional[BERTopic] = None
         self.documents = None
         self.topics = None
@@ -28,11 +34,11 @@ class BERTopicModeler:
         max_df = n_docs if n_docs < 5 else int(0.95 * n_docs) + 1
         
         vectorizer_model = CountVectorizer(
-            stop_words="english",
+            stop_words=self._stop_words,
             max_features=None,  # Don't limit features for small datasets
             min_df=min_df,
             max_df=max_df,
-            token_pattern=r"(?u)\b[a-z]{2,}\b"  # Only words with 2+ chars
+            token_pattern=r"(?u)\b\w{2,}\b"  # Words with 2+ chars (supports accented chars)
         )
         
         # Initialize and train model

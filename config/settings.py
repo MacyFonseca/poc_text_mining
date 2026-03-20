@@ -65,6 +65,13 @@ class DecisionEngineConfig:
     explanation_depth: str = "detailed"  # brief, detailed, comprehensive
 
 
+# Mapping from language name to spacy model
+SPACY_MODELS = {
+    'english': 'en_core_web_sm',
+    'spanish': 'es_core_news_sm',
+}
+
+
 @dataclass
 class PipelineConfig:
     """Main pipeline configuration."""
@@ -74,22 +81,26 @@ class PipelineConfig:
     clustering: ClusteringConfig = None
     classification: ClassificationConfig = None
     decision_engine: DecisionEngineConfig = None
+    language: str = "english"
     random_state: int = 42
     n_jobs: int = -1
 
     def __post_init__(self):
         if self.preprocessing is None:
-            self.preprocessing = TextPreprocessingConfig()
+            self.preprocessing = TextPreprocessingConfig(language=self.language)
         if self.bias_detection is None:
             self.bias_detection = BiasDetectionConfig()
         if self.topic_modeling is None:
-            self.topic_modeling = TopicModelingConfig()
+            self.topic_modeling = TopicModelingConfig(language=self.language)
         if self.clustering is None:
             self.clustering = ClusteringConfig()
         if self.classification is None:
             self.classification = ClassificationConfig()
         if self.decision_engine is None:
             self.decision_engine = DecisionEngineConfig()
+        # Propagate language to sub-configs
+        self.preprocessing.language = self.language
+        self.topic_modeling.language = self.language
 
 
 def load_config() -> PipelineConfig:

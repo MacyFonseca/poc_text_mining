@@ -201,12 +201,15 @@ class DecisionEngine:
         reasoning = [f"Topics identified: {len(topic_summary)}"]
         recommendations = []
         
-        # Check if any topic contains potential bias keywords
+        # Check if any topic contains potential bias keywords (both languages)
+        bias_indicator_words = [
+            'male', 'female', 'discriminat',
+            'masculino', 'femenino', 'discrimina'
+        ]
         biased_topics = []
         for topic_id, info in topic_summary.items():
             keywords = info['keywords']
-            # Check for concerning patterns
-            if any(word in ' '.join(keywords).lower() for word in ['male', 'female', 'discriminat']):
+            if any(word in ' '.join(keywords).lower() for word in bias_indicator_words):
                 biased_topics.append(topic_id)
         
         if biased_topics:
