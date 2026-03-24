@@ -110,7 +110,7 @@ def main(pdf_path: str, language: str = "english"):
     print(f"Bias rate                : {biased_count / len(documents):.1%}")
 
     # Export results
-    output_dir = os.path.join(os.path.dirname(__file__), 'output_from_pdf')
+    output_dir = os.path.join(os.path.dirname(__file__), 'output_ml')
     os.makedirs(output_dir, exist_ok=True)
     json_path = os.path.join(output_dir, 'ml_bias_pdf_results.json')
 
