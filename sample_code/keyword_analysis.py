@@ -5,8 +5,8 @@ for gender bias and discriminatory language via keyword matching and explicit
 bias-pattern regex.
 
 Usage:
-    python keyword_analysis.py path/to/document.pdf
-    python keyword_analysis.py path/to/document.pdf --language spanish
+    python sample_code/keyword_analysis.py path/to/document.pdf
+    python sample_code/keyword_analysis.py path/to/document.pdf --language spanish
 """
 import sys
 import os
@@ -15,8 +15,9 @@ import argparse
 
 from PyPDF2 import PdfReader
 
-# Add project to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 from analysis.bias_detector import BiasDetector
 
@@ -115,7 +116,7 @@ def main(pdf_path: str, language: str = "english"):
         print(f"Bias rate                : {biased_count / len(documents):.1%}")
 
     # Export results
-    output_dir = os.path.join(os.path.dirname(__file__), 'output')
+    output_dir = os.path.join(PROJECT_ROOT, 'output')
     os.makedirs(output_dir, exist_ok=True)
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
     json_path = os.path.join(output_dir, f'{pdf_name} - keyword_bias_results.json')
