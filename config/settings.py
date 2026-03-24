@@ -23,6 +23,17 @@ class BiasDetectionConfig:
     batch_size: int = 16
     max_length: int = 512
     threshold: float = 0.5
+    # Keyword gender-bias imbalance threshold (0-1).
+    # A male/female keyword ratio above this value flags gender imbalance.
+    gender_bias_threshold: float = 0.6
+    # Minimum overall_bias_score to flag a text as biased.
+    overall_bias_threshold: float = 0.25
+    # Weights for combining signals in BiasDetector (keyword-only).
+    # [gender_keyword, discriminatory_keyword]
+    keyword_weights: tuple = (0.6, 0.4)
+    # Weights for combining signals in MLBiasDetector.
+    # [fine_tuned, zero_shot, gender_keyword, discriminatory_keyword]
+    ml_weights: tuple = (0.30, 0.30, 0.20, 0.20)
 
 
 @dataclass
