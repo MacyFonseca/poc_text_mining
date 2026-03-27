@@ -81,24 +81,6 @@ python sample_code/ml_analysis.py path-to-file.pdf --language spanish (IF text i
 Combines a fine-tuned bias classifier, zero-shot categorisation, and keyword analysis. Results are saved to `output/`.
 
 
-### Full pipeline (programmatic)
-
-```python
-from pipelines.text_mining_pipeline import TextMiningPipeline
-
-pipeline = TextMiningPipeline()
-results = pipeline.run_full_pipeline(["Your document text...", "Another document..."])
-
-print(pipeline.generate_report())
-pipeline.export_results('results.json', format='json')
-```
-
-### Interactive notebooks
-
-```bash
-jupyter notebook notebooks/text_mining_analysis.ipynb
-```
-
 ## Key Modules
 
 | Module | Class | Purpose |
@@ -107,10 +89,6 @@ jupyter notebook notebooks/text_mining_analysis.ipynb
 | `analysis/ml_bias_detector.py` | `MLBiasDetector` | Transformer + zero-shot + keyword combined detection |
 | `analysis/bias_keywords.py` | — | Shared keyword dictionaries, patterns, severity levels (EN + ES) |
 | `analysis/topic_modeler.py` | `BERTopicModeler` | BERTopic semantic topic extraction |
-| `models/clustering.py` | `DocumentClusterer` | KMeans / Agglomerative / DBSCAN document grouping |
-| `models/classification.py` | `TextClassifier` | Logistic Regression / Random Forest / SVM classification |
-| `models/decision_engine.py` | `DecisionEngine` | Converts analysis results into actionable recommendations |
-| `pipelines/text_mining_pipeline.py` | `TextMiningPipeline` | End-to-end orchestrator (preprocess → detect → model → report) |
 | `utils/preprocessing.py` | `TextPreprocessor` | Text cleaning, tokenisation, lemmatisation, NER, POS tagging |
 | `utils/analysis_utils.py` | `DataLoader`, `Visualizer`, `ReportGenerator`, `ResultsManager` | I/O, charts, reports, result persistence |
 | `config/settings.py` | `PipelineConfig` | Centralised configuration with sensible defaults |
