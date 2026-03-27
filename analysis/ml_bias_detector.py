@@ -31,7 +31,7 @@ _ZS_MODELS = {
 }
 
 # The fine-tuned bias model only supports English.
-_FINETUNED_MODEL = 'valurank/distilroberta-bias'
+_FINETUNED_MODEL = 'himel7/bias-detector'
 
 
 def _split_text(text: str, max_len: int = 512) -> List[str]:
