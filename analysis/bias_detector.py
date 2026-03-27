@@ -1,177 +1,106 @@
-"""Bias detection using transformer models and custom heuristics."""
-import numpy as np
-from typing import Dict, List, Tuple
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import torch
-import warnings
-warnings.filterwarnings('ignore')
+"""Lightweight bias detection using keyword and pattern heuristics only.
+
+Uses the shared keyword/pattern dictionaries from ``bias_keywords``.
+No transformer models are loaded — this class is fast, requires no GPU,
+and has no heavy dependencies beyond the standard library.
+
+For ML-powered detection (zero-shot + fine-tuned models), use
+``MLBiasDetector`` from ``analysis.ml_bias_detector`` instead.
+"""
+import logging
+from typing import Dict, List
+
+from analysis.bias_keywords import (
+    detect_discriminatory_language,
+    detect_gender_bias as kw_detect_gender_bias,
+    score_to_severity,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BiasDetector:
-    """Detect gender bias and discriminatory language in text."""
+    """Detect gender bias and discriminatory language in text using
+    keyword matching and explicit bias patterns.
 
-    def __init__(self, model_name: str = "bert-base-uncased", device: str = "cuda"):
-        """Initialize bias detector with transformer model."""
-        self.model_name = model_name
-        self.device = 0 if device == "cuda" else -1
-        
-        # Initialize zero-shot classification for bias detection
-        self.classifier = pipeline(
-            "zero-shot-classification",
-            model="facebook/bart-large-mnli",
-            device=self.device
+    This is the lightweight detector — no models are downloaded or loaded.
+    """
+
+    def __init__(self, model_name: str = "bert-base-uncased",
+                 device: str = "cuda", language: str = "english"):
+        """Initialise bias detector.
+
+        Parameters
+        ----------
+        model_name : str
+            Kept for backward-compatibility; not used.
+        device : str
+            Kept for backward-compatibility; not used.
+        language : str
+            ``"english"`` or ``"spanish"``.
+        """
+        self.language = language
+
+    # -- keyword-based helpers (delegate to shared module) ------------------
+
+    def detect_gender_bias(self, text: str,
+                           bias_threshold: float = 0.6) -> Dict:
+        """Detect gender bias via keywords and explicit patterns."""
+        return kw_detect_gender_bias(
+            text, language=self.language,
+            bias_threshold=bias_threshold,
         )
-        
-        # Bias detection keywords
-        self.gender_bias_keywords = {
-            'male_biased': [
-                'he', 'his', 'him', 'man', 'men', 'boy', 'male',
-                'leader', 'manager', 'engineer', 'scientist',
-                'strong', 'aggressive', 'ambitious', 'logical'
-            ],
-            'female_biased': [
-                'she', 'her', 'hers', 'woman', 'women', 'girl', 'female',
-                'nurse', 'secretary', 'assistant', 'support',
-                'beautiful', 'emotional', 'nurturing', 'caring'
-            ]
-        }
-        
-        self.discriminatory_keywords = {
-            'age': ['young', 'old', 'elderly', 'millennial', 'boomer'],
-            'race': ['diverse', 'minority', 'immigrant'],
-            'disability': ['disabled', 'handicapped', 'special needs'],
-            'appearance': ['attractive', 'overweight', 'skinny']
-        }
-
-    def detect_gender_bias(self, text: str) -> Dict:
-        """Detect gender bias in text."""
-        text_lower = text.lower()
-        
-        male_count = sum(1 for keyword in self.gender_bias_keywords['male_biased'] 
-                        if keyword in text_lower)
-        female_count = sum(1 for keyword in self.gender_bias_keywords['female_biased'] 
-                          if keyword in text_lower)
-        
-        total = male_count + female_count
-        if total == 0:
-            return {
-                'has_gender_bias': False,
-                'male_bias_score': 0.0,
-                'female_bias_score': 0.0,
-                'bias_direction': 'neutral',
-                'confidence': 1.0
-            }
-        
-        male_ratio = male_count / total
-        female_ratio = female_count / total
-        
-        bias_threshold = 0.6
-        has_bias = True if male_ratio > bias_threshold or female_ratio > bias_threshold else False
-        
-        if male_ratio > female_ratio:
-            bias_direction = 'male'
-        elif female_ratio > male_ratio:
-            bias_direction = 'female'
-        else:
-            bias_direction = 'balanced'
-        
-        return {
-            'has_gender_bias': has_bias,
-            'male_bias_score': male_ratio,
-            'female_bias_score': female_ratio,
-            'bias_direction': bias_direction,
-            'male_keywords_found': male_count,
-            'female_keywords_found': female_count,
-            'confidence': max(male_ratio, female_ratio)
-        }
 
     def detect_discriminatory_language(self, text: str) -> Dict:
         """Detect discriminatory language by category."""
-        text_lower = text.lower()
-        results = {}
-        
-        for category, keywords in self.discriminatory_keywords.items():
-            found_keywords = [kw for kw in keywords if kw in text_lower]
-            has_discriminatory = len(found_keywords) > 0
-            results[category] = {
-                'has_discriminatory_language': has_discriminatory,
-                'keywords_found': found_keywords,
-                'count': len(found_keywords)
-            }
-        
-        return results
+        return detect_discriminatory_language(text, language=self.language)
 
-    def sentiment_and_tone_analysis(self, text: str) -> Dict:
-        """Analyze sentiment and tone that might indicate bias."""
-        try:
-            sentiment_pipeline = pipeline("sentiment-analysis")
-            result = sentiment_pipeline(text[:512])  # Limit to 512 tokens
-            
-            return {
-                'label': result[0]['label'],
-                'score': result[0]['score']
-            }
-        except Exception as e:
-            print(f"Error in sentiment analysis: {e}")
-            return {'label': 'NEUTRAL', 'score': 0.5}
+    # -- comprehensive analysis ---------------------------------------------
 
-    def toxic_language_detection(self, text: str) -> Dict:
-        """Detect potentially toxic or harmful language."""
-        try:
-            toxic_pipeline = pipeline(
-                "text-classification",
-                model="michellejieli/NSFW_text_classifier"
-            )
-            result = toxic_pipeline(text[:512])
-            
-            return {
-                'label': result[0]['label'],
-                'score': result[0]['score']
-            }
-        except Exception as e:
-            print(f"Error in toxic language detection: {e}")
-            return {'label': 'clean', 'score': 0.5}
+    def comprehensive_bias_analysis(self, text: str,
+                                    gender_bias_threshold: float = 0.6,
+                                    overall_bias_threshold: float = 0.25,
+                                    weights: tuple = (0.6, 0.4)) -> Dict:
+        """Comprehensive bias analysis combining keyword + pattern detection.
 
-    def ml_based_bias_detection(self, text: str, categories: List[str]) -> Dict:
-        """Use zero-shot classification for bias detection."""
-        try:
-            result = self.classifier(text[:512], categories)
-            
-            return {
-                'labels': result['labels'],
-                'scores': result['scores'],
-                'top_category': result['labels'][0],
-                'top_score': result['scores'][0]
-            }
-        except Exception as e:
-            print(f"Error in ML-based bias detection: {e}")
-            return {'labels': categories, 'scores': [0.0] * len(categories)}
-
-    def comprehensive_bias_analysis(self, text: str) -> Dict:
-        """Comprehensive bias analysis combining multiple techniques."""
-        analysis = {
-            'text': text[:200],  # Store first 200 chars
-            'gender_bias': self.detect_gender_bias(text),
-            'discriminatory_language': self.detect_discriminatory_language(text),
-            'sentiment': self.sentiment_and_tone_analysis(text),
-            'toxic_language': self.toxic_language_detection(text)
-        }
-        
-        # Calculate overall bias score
-        gender_score = analysis['gender_bias']['confidence']
-        discriminatory_scores = [
-            v['count'] for v in analysis['discriminatory_language'].values()
-        ]
-        overall_bias_score = (
-            gender_score * 0.4 +
-            (min(sum(discriminatory_scores), 5) / 5) * 0.3 +  # Normalize discriminatory
-            (1.0 if analysis['toxic_language']['label'] == 'nsfw' else 0.0) * 0.3
+        Parameters
+        ----------
+        gender_bias_threshold : float
+            Male/female ratio above which keyword imbalance flags gender bias.
+        overall_bias_threshold : float
+            Minimum ``overall_bias_score`` to mark the text as biased.
+        weights : tuple
+            ``(gender_weight, discriminatory_weight)`` for score combination.
+        """
+        gender_bias = self.detect_gender_bias(
+            text, bias_threshold=gender_bias_threshold,
         )
-        
-        analysis['overall_bias_score'] = min(overall_bias_score, 1.0)
-        analysis['is_biased'] = analysis['overall_bias_score'] > 0.5
-        
-        return analysis
+        discriminatory = self.detect_discriminatory_language(text)
+
+        has_discriminatory = any(
+            v['has_discriminatory_language'] for v in discriminatory.values()
+        )
+
+        gender_score = gender_bias['confidence'] if gender_bias['has_gender_bias'] else 0.0
+        discriminatory_score = 1.0 if has_discriminatory else 0.0
+
+        w_gender, w_discrim = weights
+        overall_bias_score = min(
+            gender_score * w_gender + discriminatory_score * w_discrim,
+            1.0,
+        )
+
+        is_biased = overall_bias_score >= overall_bias_threshold
+        severity = score_to_severity(overall_bias_score)
+
+        return {
+            'text': text,
+            'gender_bias': gender_bias,
+            'discriminatory_language': discriminatory,
+            'overall_bias_score': round(overall_bias_score, 4),
+            'is_biased': is_biased,
+            'severity': severity,
+        }
 
     def batch_analysis(self, texts: List[str]) -> List[Dict]:
         """Perform bias analysis on multiple texts."""
@@ -179,28 +108,34 @@ class BiasDetector:
 
     def generate_bias_report(self, analysis: Dict) -> str:
         """Generate a human-readable bias report."""
-        report = []
-        report.append("=" * 60)
-        report.append("BIAS DETECTION REPORT")
-        report.append("=" * 60)
-        report.append(f"\nText: {analysis['text']}...")
-        report.append(f"\nOverall Bias Score: {analysis['overall_bias_score']:.2%}")
-        report.append(f"Is Biased: {analysis['is_biased']}")
-        
-        # Gender bias
+        text_preview = analysis['text'][:200] + ('...' if len(analysis['text']) > 200 else '')
+        severity = analysis.get('severity', 'unknown')
+
+        report = [
+            "=" * 60,
+            "BIAS DETECTION REPORT",
+            "=" * 60,
+            f"\nText: {text_preview}",
+            f"\nOverall Bias Score: {analysis['overall_bias_score']:.2%}",
+            f"Severity: {severity.upper()}",
+            f"Is Biased: {analysis['is_biased']}",
+        ]
+
         gb = analysis['gender_bias']
         report.append(f"\nGender Bias Analysis:")
         report.append(f"  - Direction: {gb['bias_direction'].upper()}")
-        report.append(f"  - Male Keywords: {gb['male_keywords_found']}")
-        report.append(f"  - Female Keywords: {gb['female_keywords_found']}")
-        
-        # Discriminatory language
+        if gb['male_keywords_found']:
+            report.append(f"  - Male Keywords: {', '.join(gb['male_keywords_found'])}")
+        if gb['female_keywords_found']:
+            report.append(f"  - Female Keywords: {', '.join(gb['female_keywords_found'])}")
+        if gb.get('bias_patterns_matched'):
+            report.append(f"  - Bias Patterns: {', '.join(gb['bias_patterns_matched'])}")
+        if gb.get('positive_context_found'):
+            report.append(f"  - Positive Context: {', '.join(gb['positive_context_found'])}")
+
         report.append(f"\nDiscriminatory Language:")
         for category, data in analysis['discriminatory_language'].items():
             if data['count'] > 0:
                 report.append(f"  - {category.upper()}: {', '.join(data['keywords_found'])}")
-        
-        # Sentiment
-        report.append(f"\nSentiment: {analysis['sentiment']['label']} ({analysis['sentiment']['score']:.2%})")
-        
+
         return '\n'.join(report)

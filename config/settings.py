@@ -23,6 +23,17 @@ class BiasDetectionConfig:
     batch_size: int = 16
     max_length: int = 512
     threshold: float = 0.5
+    # Keyword gender-bias imbalance threshold (0-1).
+    # A male/female keyword ratio above this value flags gender imbalance.
+    gender_bias_threshold: float = 0.6
+    # Minimum overall_bias_score to flag a text as biased.
+    overall_bias_threshold: float = 0.25
+    # Weights for combining signals in BiasDetector (keyword-only).
+    # [gender_keyword, discriminatory_keyword]
+    keyword_weights: tuple = (0.6, 0.4)
+    # Weights for combining signals in MLBiasDetector.
+    # [fine_tuned, zero_shot, gender_keyword, discriminatory_keyword]
+    ml_weights: tuple = (0.30, 0.30, 0.20, 0.20)
 
 
 @dataclass
@@ -65,6 +76,13 @@ class DecisionEngineConfig:
     explanation_depth: str = "detailed"  # brief, detailed, comprehensive
 
 
+# Mapping from language name to spacy model
+SPACY_MODELS = {
+    'english': 'en_core_web_sm',
+    'spanish': 'es_core_news_sm',
+}
+
+
 @dataclass
 class PipelineConfig:
     """Main pipeline configuration."""
@@ -74,22 +92,26 @@ class PipelineConfig:
     clustering: ClusteringConfig = None
     classification: ClassificationConfig = None
     decision_engine: DecisionEngineConfig = None
+    language: str = "english"
     random_state: int = 42
     n_jobs: int = -1
 
     def __post_init__(self):
         if self.preprocessing is None:
-            self.preprocessing = TextPreprocessingConfig()
+            self.preprocessing = TextPreprocessingConfig(language=self.language)
         if self.bias_detection is None:
             self.bias_detection = BiasDetectionConfig()
         if self.topic_modeling is None:
-            self.topic_modeling = TopicModelingConfig()
+            self.topic_modeling = TopicModelingConfig(language=self.language)
         if self.clustering is None:
             self.clustering = ClusteringConfig()
         if self.classification is None:
             self.classification = ClassificationConfig()
         if self.decision_engine is None:
             self.decision_engine = DecisionEngineConfig()
+        # Propagate language to sub-configs
+        self.preprocessing.language = self.language
+        self.topic_modeling.language = self.language
 
 
 def load_config() -> PipelineConfig:
