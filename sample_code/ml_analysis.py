@@ -21,14 +21,18 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 from analysis.ml_bias_detector import MLBiasDetector
+from utils.preprocessing import TextPreprocessor
+from config.settings import TextPreprocessingConfig
 
 SUPPORTED_LANGUAGES = ['english', 'spanish']
 
 
-def load_texts_from_pdf(pdf_path: str) -> list[str]:
+def load_texts_from_pdf(pdf_path: str, preprocessor: TextPreprocessor) -> list[str]:
     """Extract text from each page of a PDF.
 
     Each page is returned as a separate document.  Empty pages are skipped.
+    A light clean_text() pass removes URLs, emails, and HTML artifacts before
+    text is passed to the bias detectors.
     """
     reader = PdfReader(pdf_path)
     documents = []
@@ -36,6 +40,7 @@ def load_texts_from_pdf(pdf_path: str) -> list[str]:
         text = page.extract_text()
         if text and text.strip():
             clean = ' '.join(text.split())
+            clean = preprocessor.clean_text(clean)
             documents.append(clean)
 
     if not documents:
@@ -89,13 +94,14 @@ def main(pdf_path: str, language: str = "english"):
     """Run ML-based bias detection on each page of a PDF."""
     print("\n" + "=" * 70)
     print("ML-BASED BIAS DETECTION — PDF ANALYSIS")
-    print(f"Fine-tuned model : valurank/distilroberta-bias {'(English only)' if language != 'english' else ''}")
+    print(f"Fine-tuned model : himel7/bias-detector {'(English only)' if language != 'english' else ''}")
     print(f"Zero-shot model  : {'facebook/bart-large-mnli' if language == 'english' else 'joeddav/xlm-roberta-large-xnli'}")
     print(f"Language         : {language.upper()}")
     print("=" * 70 + "\n")
 
     print(f"Loading text from PDF: {pdf_path}")
-    documents = load_texts_from_pdf(pdf_path)
+    preprocessor = TextPreprocessor(TextPreprocessingConfig(language=language))
+    documents = load_texts_from_pdf(pdf_path, preprocessor)
     print(f"Loaded {len(documents)} pages from PDF\n")
 
     print("Initialising MLBiasDetector (downloads models on first run)...\n")
