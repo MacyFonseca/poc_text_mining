@@ -11,12 +11,11 @@ from analysis.ml_bias_detector import MLBiasDetector
 from utils.bias_analysis import (
     run_keyword_bias_detection,
     run_ml_bias_detection,
-    SUPPORTED_LANGUAGES,
 )
 
 st.set_page_config(page_title="AI PDF Bias Analyzer", page_icon="📄", layout="wide")
 
-# Custom CSS for button styling (White background, blue outline, custom hover)
+# Custom CSS for button styling
 st.markdown(
     """
     <style>
@@ -40,7 +39,6 @@ st.markdown(
 )
 
 
-# Callback to clear results when a new file is uploaded or removed
 def clear_analysis_state():
     st.session_state.analysis_results = None
     st.session_state.active_action = None
@@ -53,20 +51,16 @@ if "active_action" not in st.session_state:
     st.session_state.active_action = None
 
 
-# Cache the ML Model into RAM memory
+# Cache the ML Model into RAM memory per language
 @st.cache_resource
 def get_ml_detector(language: str):
     return MLBiasDetector(device="cpu", language=language)
 
 
 st.title("📄 AI PDF Bias Analysis Interface")
-st.markdown("Upload a PDF document and select an analysis method.")
+st.markdown("Upload a PDF document and select an analysis method. Language is automatically detected.")
 
-# Sidebar Configuration
-st.sidebar.header("Configuration")
-selected_language = st.sidebar.selectbox("Language", SUPPORTED_LANGUAGES, index=0)
-
-# File Uploader with automatic state reset on change
+# File Uploader
 uploaded_file = st.file_uploader(
     "Upload PDF Document",
     type=["pdf"],
@@ -75,16 +69,17 @@ uploaded_file = st.file_uploader(
 
 
 def render_summary_metrics(summary: dict):
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Pages", summary["total_pages"])
-    m2.metric("Biased Pages", summary["biased_pages"])
-    m3.metric("Neutral Pages", summary["neutral_pages"])
-    m4.metric("Overall Bias Rate", f"{summary['bias_rate']:.1%}")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Detected Language", summary["detected_language"].capitalize())
+    m2.metric("Total Pages", summary["total_pages"])
+    m3.metric("Biased Pages", summary["biased_pages"])
+    m4.metric("Neutral Pages", summary["neutral_pages"])
+    m5.metric("Overall Bias Rate", f"{summary['bias_rate']:.1%}")
 
 
 def render_keyword_results(results: dict):
     """Full-width view for Keyword-Based analysis."""
-    st.success("Keyword Bias Analysis Complete!")
+    st.success(f"Keyword Bias Analysis Complete! Language: **{results['summary']['detected_language'].upper()}**")
     render_summary_metrics(results["summary"])
     st.divider()
 
@@ -114,7 +109,7 @@ def render_keyword_results(results: dict):
 
 def render_ml_results(results: dict):
     """Simplified full-width view for ML-Based analysis."""
-    st.success("ML Bias Analysis Complete!")
+    st.success(f"ML Bias Analysis Complete! Language: **{results['summary']['detected_language'].upper()}**")
     render_summary_metrics(results["summary"])
     st.divider()
 
@@ -145,31 +140,30 @@ def render_ml_results(results: dict):
 if uploaded_file is not None:
     st.info(f"**File:** {uploaded_file.name} | **Size:** {uploaded_file.size / 1024:.2f} KB")
 
-    # Layout: Using 4 columns so buttons occupy ~25% width each, left-aligned
+    # Left-aligned button columns (~25% width each)
     btn_col1, btn_col2, _, _ = st.columns([1, 1, 1, 1])
 
     with btn_col1:
         if st.button("🚀 Action 1: Keyword", use_container_width=True):
-            with st.spinner("Running Keyword Detection..."):
+            with st.spinner("Detecting language and running Keyword Analysis..."):
                 try:
-                    st.session_state.analysis_results = run_keyword_bias_detection(uploaded_file, selected_language)
+                    st.session_state.analysis_results = run_keyword_bias_detection(uploaded_file)
                     st.session_state.active_action = "keyword"
                 except Exception as e:
                     st.error(f"Error executing Action 1: {str(e)}")
 
     with btn_col2:
         if st.button("🧠 Action 2: ML Model", use_container_width=True):
-            with st.spinner("Running ML Inferences..."):
+            with st.spinner("Detecting language and executing ML Model Inferences..."):
                 try:
-                    detector = get_ml_detector(selected_language)
-                    st.session_state.analysis_results = run_ml_bias_detection(uploaded_file, detector, selected_language)
+                    st.session_state.analysis_results = run_ml_bias_detection(uploaded_file, get_ml_detector)
                     st.session_state.active_action = "ml"
                 except Exception as e:
                     st.error(f"Error executing Action 2: {str(e)}")
 
-    # Full-Width Output View (Rendered outside column wrappers)
+    # Full-Width Output View
     if st.session_state.analysis_results is not None:
-        st.write("")  # Spacing
+        st.write("")
         if st.session_state.active_action == "keyword":
             render_keyword_results(st.session_state.analysis_results)
         elif st.session_state.active_action == "ml":

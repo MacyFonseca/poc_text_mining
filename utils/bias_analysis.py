@@ -1,45 +1,70 @@
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from PyPDF2 import PdfReader
+from langdetect import detect, DetectorFactory
 
 from analysis.bias_detector import BiasDetector
-from analysis.ml_bias_detector import MLBiasDetector
 from utils.preprocessing import TextPreprocessor
 from config.settings import TextPreprocessingConfig
+
+# Set seed for deterministic language detection results
+DetectorFactory.seed = 0
 
 SUPPORTED_LANGUAGES = ['english', 'spanish']
 
 
-def extract_texts_from_pdf_stream(pdf_file, preprocessor: TextPreprocessor) -> List[str]:
-    """Extract clean text from each page of an in-memory PDF file/stream."""
+def extract_raw_texts_from_pdf_stream(pdf_file) -> List[str]:
+    """Extract raw text per page from an in-memory PDF stream."""
     reader = PdfReader(pdf_file)
-    documents = []
+    raw_pages = []
     for page in reader.pages:
         text = page.extract_text()
         if text and text.strip():
-            clean = ' '.join(text.split())
-            clean = preprocessor.clean_text(clean)
-            documents.append(clean)
-
-    return documents
+            raw_pages.append(' '.join(text.split()))
+    return raw_pages
 
 
-def run_keyword_bias_detection(pdf_file, language: str = "english") -> Dict[str, Any]:
-    """Keyword-based lightweight bias detection."""
-    if language not in SUPPORTED_LANGUAGES:
-        raise ValueError(f"Unsupported language '{language}'. Choose from {SUPPORTED_LANGUAGES}")
+def detect_document_language(pages: List[str]) -> str:
+    """
+    Detect language across the document pages using langdetect.
+    Returns 'spanish' if Spanish is detected; defaults to 'english' for all others.
+    """
+    if not pages:
+        return 'english'
 
-    preprocessor = TextPreprocessor(TextPreprocessingConfig(language=language))
-    documents = extract_texts_from_pdf_stream(pdf_file, preprocessor)
+    # Combine up to first 3 pages for reliable language detection
+    sample_text = " ".join(pages[:3])
 
-    if not documents:
+    try:
+        lang_code = detect(sample_text)
+        if lang_code == 'es':
+            return 'spanish'
+        return 'english'
+    except Exception:
+        return 'english'
+
+
+def run_keyword_bias_detection(pdf_file) -> Dict[str, Any]:
+    """Action 1: Keyword-based lightweight bias detection with auto-language detection."""
+    # Reset stream pointer to beginning
+    pdf_file.seek(0)
+    raw_documents = extract_raw_texts_from_pdf_stream(pdf_file)
+
+    if not raw_documents:
         raise ValueError("No extractable text was found in the provided PDF.")
 
-    detector = BiasDetector(language=language)
+    # Automatically detect language
+    detected_language = detect_document_language(raw_documents)
+
+    # Clean text using detected language config
+    preprocessor = TextPreprocessor(TextPreprocessingConfig(language=detected_language))
+    clean_documents = [preprocessor.clean_text(doc) for doc in raw_documents]
+
+    detector = BiasDetector(language=detected_language)
     biased_count = 0
     page_results = []
 
-    for idx, text in enumerate(documents, start=1):
+    for idx, text in enumerate(clean_documents, start=1):
         analysis = detector.comprehensive_bias_analysis(text)
         if analysis.get('is_biased', False):
             biased_count += 1
@@ -59,35 +84,40 @@ def run_keyword_bias_detection(pdf_file, language: str = "english") -> Dict[str,
             },
         })
 
-    total_pages = len(documents)
+    total_pages = len(clean_documents)
     return {
         "summary": {
             "total_pages": total_pages,
             "biased_pages": biased_count,
             "neutral_pages": total_pages - biased_count,
             "bias_rate": (biased_count / total_pages) if total_pages > 0 else 0.0,
-            "language": language
+            "detected_language": detected_language
         },
         "pages": page_results
     }
 
 
-def run_ml_bias_detection(pdf_file, detector_instance: MLBiasDetector,
-                          language: str = "english") -> Dict[str, Any]:
-    """Machine Learning-based bias detection using fine-tuned & zero-shot models."""
-    if language not in SUPPORTED_LANGUAGES:
-        raise ValueError(f"Unsupported language '{language}'. Choose from {SUPPORTED_LANGUAGES}")
+def run_ml_bias_detection(pdf_file, get_detector_fn) -> Dict[str, Any]:
+    """Action 2: ML-based bias detection with auto-language detection."""
+    pdf_file.seek(0)
+    raw_documents = extract_raw_texts_from_pdf_stream(pdf_file)
 
-    preprocessor = TextPreprocessor(TextPreprocessingConfig(language=language))
-    documents = extract_texts_from_pdf_stream(pdf_file, preprocessor)
-
-    if not documents:
+    if not raw_documents:
         raise ValueError("No extractable text was found in the provided PDF.")
+
+    # Automatically detect language
+    detected_language = detect_document_language(raw_documents)
+
+    # Fetch cached model corresponding to detected language
+    detector_instance = get_detector_fn(detected_language)
+
+    preprocessor = TextPreprocessor(TextPreprocessingConfig(language=detected_language))
+    clean_documents = [preprocessor.clean_text(doc) for doc in raw_documents]
 
     biased_count = 0
     page_results = []
 
-    for idx, text in enumerate(documents, start=1):
+    for idx, text in enumerate(clean_documents, start=1):
         analysis = detector_instance.comprehensive_bias_analysis(text)
         if analysis.get('is_biased', False):
             biased_count += 1
@@ -109,14 +139,14 @@ def run_ml_bias_detection(pdf_file, detector_instance: MLBiasDetector,
             },
         })
 
-    total_pages = len(documents)
+    total_pages = len(clean_documents)
     return {
         "summary": {
             "total_pages": total_pages,
             "biased_pages": biased_count,
             "neutral_pages": total_pages - biased_count,
             "bias_rate": (biased_count / total_pages) if total_pages > 0 else 0.0,
-            "language": language
+            "detected_language": detected_language
         },
         "pages": page_results
     }
