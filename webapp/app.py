@@ -16,7 +16,7 @@ from utils.bias_analysis import (
 
 st.set_page_config(page_title="AI PDF Bias Analyzer", page_icon="📄", layout="wide")
 
-# Custom CSS for custom button appearance (White background, blue outline, custom sizing)
+# Custom CSS for button styling (White background, blue outline, custom hover)
 st.markdown(
     """
     <style>
@@ -40,7 +40,20 @@ st.markdown(
 )
 
 
-# Cache the ML Model into memory
+# Callback to clear results when a new file is uploaded or removed
+def clear_analysis_state():
+    st.session_state.analysis_results = None
+    st.session_state.active_action = None
+
+
+# Session state initialization
+if "analysis_results" not in st.session_state:
+    st.session_state.analysis_results = None
+if "active_action" not in st.session_state:
+    st.session_state.active_action = None
+
+
+# Cache the ML Model into RAM memory
 @st.cache_resource
 def get_ml_detector(language: str):
     return MLBiasDetector(device="cpu", language=language)
@@ -53,8 +66,12 @@ st.markdown("Upload a PDF document and select an analysis method.")
 st.sidebar.header("Configuration")
 selected_language = st.sidebar.selectbox("Language", SUPPORTED_LANGUAGES, index=0)
 
-# File Uploader
-uploaded_file = st.file_uploader("Upload PDF Document", type=["pdf"])
+# File Uploader with automatic state reset on change
+uploaded_file = st.file_uploader(
+    "Upload PDF Document",
+    type=["pdf"],
+    on_change=clear_analysis_state,
+)
 
 
 def render_summary_metrics(summary: dict):
@@ -96,7 +113,7 @@ def render_keyword_results(results: dict):
 
 
 def render_ml_results(results: dict):
-    """Simplified, full-width view for ML-Based analysis matching keyword format."""
+    """Simplified full-width view for ML-Based analysis."""
     st.success("ML Bias Analysis Complete!")
     render_summary_metrics(results["summary"])
     st.divider()
@@ -124,18 +141,12 @@ def render_ml_results(results: dict):
             st.caption(f"Text snippet: {page['text_snippet']}")
 
 
-# Handle upload and actions
+# Handle Upload & Actions
 if uploaded_file is not None:
     st.info(f"**File:** {uploaded_file.name} | **Size:** {uploaded_file.size / 1024:.2f} KB")
 
-    # Layout: Using 4 columns so buttons occupy ~25% width each, aligned left
+    # Layout: Using 4 columns so buttons occupy ~25% width each, left-aligned
     btn_col1, btn_col2, _, _ = st.columns([1, 1, 1, 1])
-
-    # Session state initialization to hold results for full-width view
-    if "analysis_results" not in st.session_state:
-        st.session_state.analysis_results = None
-    if "active_action" not in st.session_state:
-        st.session_state.active_action = None
 
     with btn_col1:
         if st.button("🚀 Action 1: Keyword", use_container_width=True):
