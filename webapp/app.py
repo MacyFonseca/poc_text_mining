@@ -13,7 +13,7 @@ from utils.bias_analysis import (
     run_ml_bias_detection,
 )
 
-st.set_page_config(page_title="AI PDF Bias Analyzer", page_icon="📄", layout="wide")
+st.set_page_config(page_title="PDF Bias Analyzer", page_icon="📄", layout="wide")
 
 # Custom CSS for button styling
 st.markdown(
@@ -57,7 +57,7 @@ def get_ml_detector(language: str):
     return MLBiasDetector(device="cpu", language=language)
 
 
-st.title("📄 AI PDF Bias Analysis Interface")
+st.title("📄 PDF Bias Analysis Interface")
 st.markdown("Upload a PDF document and select an analysis method. Language is automatically detected.")
 
 # File Uploader
@@ -144,22 +144,22 @@ if uploaded_file is not None:
     btn_col1, btn_col2, _, _ = st.columns([1, 1, 1, 1])
 
     with btn_col1:
-        if st.button("🚀 Action 1: Keyword", use_container_width=True):
+        if st.button("🗝️ Keyword based analysis", use_container_width=True):
             with st.spinner("Detecting language and running Keyword Analysis..."):
                 try:
                     st.session_state.analysis_results = run_keyword_bias_detection(uploaded_file)
                     st.session_state.active_action = "keyword"
                 except Exception as e:
-                    st.error(f"Error executing Action 1: {str(e)}")
+                    st.error(f"Error executing Keyword analysis: {str(e)}")
 
     with btn_col2:
-        if st.button("🧠 Action 2: ML Model", use_container_width=True):
+        if st.button("🧠 ML Model based analysis", use_container_width=True):
             with st.spinner("Detecting language and executing ML Model Inferences..."):
                 try:
                     st.session_state.analysis_results = run_ml_bias_detection(uploaded_file, get_ml_detector)
                     st.session_state.active_action = "ml"
                 except Exception as e:
-                    st.error(f"Error executing Action 2: {str(e)}")
+                    st.error(f"Error executing ML analysis: {str(e)}")
 
     # Full-Width Output View
     if st.session_state.analysis_results is not None:
