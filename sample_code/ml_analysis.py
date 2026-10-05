@@ -1,7 +1,7 @@
 """ML-based bias detection on PDF documents.
 
 Uses MLBiasDetector which combines three signal sources:
-1. Fine-tuned binary bias classifier (valurank/distilroberta-bias — English only).
+1. Fine-tuned binary bias classifier (himel7/bias-detector — English only).
 2. Zero-shot categorisation (BART for English, XLM-R for Spanish).
 3. Keyword / pattern analysis (shared bias_keywords module).
 
