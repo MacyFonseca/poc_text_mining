@@ -13,8 +13,10 @@ class TextPreprocessingConfig:
     language: str = "english"
 
 
-# Mapping from language name to spaCy model
+# spaCy models per language, in order of preference.  The medium models give
+# noticeably better lemmas and morphology (needed for generic-masculine
+# detection); the small ones are kept as a fallback.
 SPACY_MODELS = {
-    'english': 'en_core_web_sm',
-    'spanish': 'es_core_news_sm',
+    'english': ['en_core_web_md', 'en_core_web_sm'],
+    'spanish': ['es_core_news_md', 'es_core_news_sm'],
 }
