@@ -1,7 +1,10 @@
 import base64
+import html
 import io
+import json
 import os
 import sys
+from datetime import datetime
 
 # Ensure project root directory is in sys.path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -10,9 +13,11 @@ if PROJECT_ROOT not in sys.path:
 
 import streamlit as st
 from PIL import Image, ImageChops
+from analysis.llm_bias_detector import DEFAULT_MODEL as LLM_MODEL, LLMBiasDetector
 from analysis.ml_bias_detector import MLBiasDetector
 from utils.bias_analysis import (
     run_keyword_bias_detection,
+    run_llm_bias_detection,
     run_ml_bias_detection,
 )
 
@@ -195,6 +200,10 @@ def get_ml_detector(language: str):
     return MLBiasDetector(device="cpu", language=language)
 
 
+def get_llm_detector(language: str):
+    return LLMBiasDetector(language=language)
+
+
 st.markdown(
     f"""
     <div class="app-header">
@@ -215,72 +224,142 @@ uploaded_file = st.file_uploader(
 )
 
 
+SEVERITY_COLORS = {
+    "high": "#f6c1c1", "medium": "#fbe0b5", "low": "#fff3b0",
+}
+FEEDBACK_PATH = os.path.join(PROJECT_ROOT, "data", "feedback", "feedback.jsonl")
+
+
+def finding_level(score: float) -> str:
+    return "high" if score >= 0.6 else "medium" if score >= 0.35 else "low"
+
+
+def highlight_text(text: str, findings: list) -> str:
+    """HTML of *text* with each finding wrapped in a coloured <mark> and a tooltip."""
+    out, pos = [], 0
+    for f in sorted(findings, key=lambda f: (f["start"], -f["end"])):
+        if f["start"] < pos:
+            continue  # overlaps a span already highlighted
+        tip = f"{f['subtype']}: {f['explanation']}"
+        if f.get("suggestion"):
+            tip += f" | Suggestion: {f['suggestion']}"
+        out.append(html.escape(text[pos:f["start"]]))
+        out.append(
+            f'<mark title="{html.escape(tip, quote=True)}" style="background:{SEVERITY_COLORS[finding_level(f["score"])]};'
+            f'padding:0 2px;border-radius:3px;">{html.escape(text[f["start"]:f["end"]])}</mark>'
+        )
+        pos = f["end"]
+    out.append(html.escape(text[pos:]))
+    return '<div style="line-height:1.7;font-size:0.92rem;">' + "".join(out) + "</div>"
+
+
+def save_feedback(page: dict, finding: dict, label: int):
+    """Append a reviewer judgement to data/feedback in gold-set format (ROADMAP P4.3)."""
+    sentence = finding.get("sentence") or page["full_text"][max(0, finding["start"] - 120):finding["end"] + 120]
+    record = {
+        "id": f"fb-{datetime.now().strftime('%Y%m%d%H%M%S%f')}",
+        "language": page["language"],
+        "split": "dev",
+        "text": sentence,
+        "label": label,
+        "category": finding["subtype"] if label else "none",
+        "hard_negative": not label,
+        "source": "feedback-webapp",
+        "flagged_by": finding["type"],
+        "match": finding["match"],
+    }
+    os.makedirs(os.path.dirname(FEEDBACK_PATH), exist_ok=True)
+    with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
 def render_summary_metrics(summary: dict):
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Detected Language", summary["detected_language"].capitalize())
-    m2.metric("Total Pages", summary["total_pages"])
+    m2.metric("Pages Analysed", summary["total_pages"])
     m3.metric("Biased Pages", summary["biased_pages"])
     m4.metric("Neutral Pages", summary["neutral_pages"])
     m5.metric("Overall Bias Rate", f"{summary['bias_rate']:.1%}")
+    notes = []
+    if len(summary.get("page_languages", {})) > 1:
+        notes.append("Mixed languages: " + ", ".join(f"{n} {lang}" for lang, n in summary["page_languages"].items())
+                     + " pages, each analysed in its own language.")
+    if summary.get("references_from_page"):
+        notes.append(f"References from page {summary['references_from_page']} onwards were not analysed.")
+    if summary.get("empty_pages"):
+        notes.append(f"Pages without extractable text (possibly scanned): {summary['empty_pages']}.")
+    for note in notes:
+        st.caption(note)
+    if summary.get("findings_by_subtype"):
+        st.caption("Findings: " + ", ".join(f"{k.replace('_', ' ')} ({v})"
+                                              for k, v in sorted(summary["findings_by_subtype"].items(),
+                                                                 key=lambda kv: -kv[1])))
 
 
-def render_keyword_results(results: dict):
-    """Full-width view for Keyword-Based analysis."""
-    st.success(f"Keyword Bias Analysis Complete! Language: **{results['summary']['detected_language'].upper()}**")
+def render_method_details(page: dict, action: str):
+    if action == "ml":
+        ml_info = page.get("ml_detection", {})
+        cat_info = page.get("ml_categorization", {})
+        st.write(f"- Fine-tuned model: `{ml_info.get('label', 'N/A')}` ({ml_info.get('confidence', 0):.2f})")
+        st.write(f"- Primary bias category (zero-shot): **{cat_info.get('top_category', 'N/A')}** "
+                 f"({cat_info.get('top_score', 0):.2f})")
+        if page.get("signal_scores"):
+            st.write("- Signals: " + ", ".join(f"{k.replace('_', ' ')} {v:.2f}" for k, v in page["signal_scores"].items()))
+    elif action == "llm":
+        llm = page.get("llm_review", {})
+        if not llm.get("available"):
+            st.warning("LLM unavailable for this page; keyword signals only.")
+        else:
+            st.write(f"- Model: `{llm.get('model')}`, {len(llm.get('findings', []))} passages flagged")
+    gb = page.get("gender_bias", {})
+    st.write(f"- Gender reference direction: `{gb.get('bias_direction', 'N/A')}`")
+
+
+def render_results(results: dict, action: str):
+    labels = {"keyword": "Keyword", "ml": "ML", "llm": "LLM review"}
+    st.success(f"{labels[action]} analysis complete! Language: **{results['summary']['detected_language'].upper()}**")
     render_summary_metrics(results["summary"])
+    st.download_button(
+        "Download results (JSON)",
+        data=json.dumps(results, indent=2, ensure_ascii=False),
+        file_name=f"bias_results_{action}.json",
+        mime="application/json",
+    )
     st.divider()
 
-    st.subheader("Page Breakdown (Keyword Matching)")
+    st.subheader("Page Breakdown")
+    show_neutral = st.toggle("Show neutral pages", value=False)
     for page in results["pages"]:
+        if not page["is_biased"] and not page["findings"] and not show_neutral:
+            continue
         status = "⚠️ BIAS DETECTED" if page["is_biased"] else "✅ Neutral"
-        with st.expander(f"Page {page['page_number']} — {status} (Severity: {page['severity'].upper()})"):
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("**Gender Bias Details**")
-                gb = page["gender_bias"]
-                st.write(f"- Direction: `{gb.get('bias_direction', 'N/A')}`")
-                st.write(f"- Male Keywords: `{', '.join(gb.get('male_keywords_found', [])) or 'None'}`")
-                st.write(f"- Female Keywords: `{', '.join(gb.get('female_keywords_found', [])) or 'None'}`")
-
-            with c2:
-                st.markdown("**Discriminatory Terms**")
-                disc = page["discriminatory_language"]
-                if disc:
-                    for cat, keywords in disc.items():
-                        st.write(f"- **{cat.capitalize()}:** {', '.join(keywords)}")
-                else:
-                    st.write("None detected.")
-
-            st.caption(f"Text snippet: {page['text_snippet']}")
-
-
-def render_ml_results(results: dict):
-    """Simplified full-width view for ML-Based analysis."""
-    st.success(f"ML Bias Analysis Complete! Language: **{results['summary']['detected_language'].upper()}**")
-    render_summary_metrics(results["summary"])
-    st.divider()
-
-    st.subheader("Page Breakdown (ML Analysis)")
-    for page in results["pages"]:
-        status = "⚠️ BIAS DETECTED" if page["is_biased"] else "✅ Neutral"
-        with st.expander(f"Page {page['page_number']} — {status} (Severity: {page['severity'].upper()})"):
-            c1, c2 = st.columns(2)
-
-            with c1:
-                st.markdown("**ML Model Classification**")
-                ml_info = page.get("ml_detection", {})
-                cat_info = page.get("ml_categorization", {})
-
-                st.write(f"- Model Flag: `{ml_info.get('label', 'N/A')}`")
-                st.write(f"- Primary Bias Category: **{cat_info.get('top_category', 'N/A')}**")
-
-            with c2:
-                st.markdown("**Matched Keywords & Gender Signals**")
-                gb = page.get("gender_bias", {})
-                st.write(f"- Direction: `{gb.get('bias_direction', 'N/A')}`")
-                st.write(f"- Keywords Found: `{', '.join(gb.get('male_keywords_found', []) + gb.get('female_keywords_found', [])) or 'None'}`")
-
-            st.caption(f"Text snippet: {page['text_snippet']}")
+        with st.expander(
+            f"Page {page['page_number']} — {status} (Severity: {page['severity'].upper()}, "
+            f"score {page['overall_bias_score']:.2f}, {len(page['findings'])} findings)"
+        ):
+            render_method_details(page, action)
+            if page["findings"]:
+                st.markdown("**Text with highlighted findings** (hover for explanation and suggestion)")
+                st.markdown(highlight_text(page["full_text"], page["findings"]), unsafe_allow_html=True)
+                st.markdown("**Findings and suggestions**")
+                for i, f in enumerate(page["findings"]):
+                    c1, c2, c3 = st.columns([6, 1, 1])
+                    with c1:
+                        st.markdown(
+                            f"`{f['subtype'].replace('_', ' ')}` **{html.escape(f['match'])}**: {f['explanation']}"
+                            + (f"  \n➜ *{html.escape(f['suggestion'])}*" if f.get("suggestion") else "")
+                        )
+                    key = f"{action}-{page['page_number']}-{i}"
+                    with c2:
+                        if st.button("👍", key=f"ok-{key}", help="Correct finding: save as a labelled example"):
+                            save_feedback(page, f, 1)
+                            st.toast("Saved as a correct finding.")
+                    with c3:
+                        if st.button("👎", key=f"fp-{key}", help="False positive: save as a labelled example"):
+                            save_feedback(page, f, 0)
+                            st.toast("Saved as a false positive.")
+            else:
+                st.caption(f"Text snippet: {page['text_snippet']}")
 
 
 # Handle Upload & Actions
@@ -288,7 +367,7 @@ if uploaded_file is not None:
     st.info(f"**File:** {uploaded_file.name} | **Size:** {uploaded_file.size / 1024:.2f} KB")
 
     # Left-aligned button columns (~25% width each)
-    btn_col1, btn_col2, _, _ = st.columns([1, 1, 1, 1])
+    btn_col1, btn_col2, btn_col3, _ = st.columns([1, 1, 1, 1])
 
     with btn_col1:
         if st.button("🗝️ Keyword based analysis", use_container_width=True):
@@ -308,13 +387,21 @@ if uploaded_file is not None:
                 except Exception as e:
                     st.error(f"Error executing ML analysis: {str(e)}")
 
+    with btn_col3:
+        llm_ready = LLMBiasDetector().is_available()
+        if st.button("💬 LLM review (local, slow)", use_container_width=True, disabled=not llm_ready,
+                     help=None if llm_ready else f"Start Ollama and run: ollama pull {LLM_MODEL}"):
+            with st.spinner("Reviewing each page with the local LLM (about a minute per page on CPU)..."):
+                try:
+                    st.session_state.analysis_results = run_llm_bias_detection(uploaded_file, get_llm_detector)
+                    st.session_state.active_action = "llm"
+                except Exception as e:
+                    st.error(f"Error executing LLM review: {str(e)}")
+
     # Full-Width Output View
     if st.session_state.analysis_results is not None:
         st.write("")
-        if st.session_state.active_action == "keyword":
-            render_keyword_results(st.session_state.analysis_results)
-        elif st.session_state.active_action == "ml":
-            render_ml_results(st.session_state.analysis_results)
+        render_results(st.session_state.analysis_results, st.session_state.active_action)
 
 
 st.markdown(
