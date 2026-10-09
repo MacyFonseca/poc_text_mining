@@ -35,5 +35,9 @@ pip-selfcheck.json
 __pycache__/
 output*/
 venv/
-data/
+data/*
+!data/gold/
+data/feedback/
+eval/results/*
+!eval/results/.gitkeep
 .vscode/
