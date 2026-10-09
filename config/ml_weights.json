@@ -1,0 +1,23 @@
+{
+  "spanish": {
+    "weights": [
+      0.0,
+      0.0871,
+      0.6012,
+      0.3117
+    ],
+    "threshold": 0.1995,
+    "n_dev": 50
+  },
+  "english": {
+    "weights": [
+      0.0595,
+      0.1458,
+      0.4735,
+      0.3212
+    ],
+    "threshold": 0.1838,
+    "n_dev": 45
+  },
+  "_note": "Fitted by eval/fit_weights.py on the dev split of data/gold (Claude-written seed sentences, 2026-10-08). Refit after expert annotation (ROADMAP P0.2). Order: fine_tuned, zero_shot, gender_keyword, discriminatory_keyword."
+}

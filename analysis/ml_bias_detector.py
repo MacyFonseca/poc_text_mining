@@ -1,29 +1,46 @@
-"""Bias detection using fine-tuned transformer models and zero-shot classification.
+"""Bias detection using fine-tuned transformer models and zero-shot (NLI) classification.
 
 Combines three signal sources:
-1. Fine-tuned binary bias classifier (``himel7/bias-detector`` – English only).
-2. Zero-shot categorisation (BART for English, XLM-R for Spanish).
+1. Fine-tuned binary bias classifier (``himel7/bias-detector`` - English only,
+   trained on news media bias; scored per sentence).
+2. Zero-shot categorisation with an NLI model (BART for English, XLM-R for
+   Spanish).  Each category is a hypothesis in the document's language
+   ("Este texto expresa un estereotipo de género.") scored independently with
+   the full 3-way entailment probability, over windows of a few sentences.
 3. Keyword / pattern analysis (shared ``bias_keywords`` module).
 
-The ``is_biased`` decision is now threshold-based rather than OR-gated to
-reduce false positives on texts that merely *discuss* gender.
+The ``is_biased`` decision is threshold-based on a weighted sum.  When a
+signal is unavailable (the fine-tuned model for Spanish) its weight is
+redistributed over the remaining signals instead of counting as zero.
 """
+import json
 import logging
-from typing import Dict, List
+import os
+from typing import Dict, List, Optional
 
-from transformers import pipeline
+import torch
 import warnings
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    pipeline,
+)
 
 from analysis.bias_keywords import (
+    collect_findings,
     detect_discriminatory_language,
     detect_gender_bias as kw_detect_gender_bias,
+    discriminatory_score as kw_discriminatory_score,
     score_to_severity,
 )
+from utils.nlp import get_nlp
 
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
-# Model selection per language
+# NLI model per language.  Measured on data/gold: XLM-R-large gives usable
+# entailment scores for Spanish; mDeBERTa-v3-base-xnli gives near-zero
+# entailment for every sentence with these hypotheses (see ROADMAP P2.1).
 _ZS_MODELS = {
     'english': 'facebook/bart-large-mnli',
     'spanish': 'joeddav/xlm-roberta-large-xnli',
@@ -32,35 +49,45 @@ _ZS_MODELS = {
 # The fine-tuned bias model only supports English.
 _FINETUNED_MODEL = 'himel7/bias-detector'
 
+# One hypothesis per category, in the document's language.
+_HYPOTHESES = {
+    'english': {
+        'gender bias': 'This text expresses a gender stereotype.',
+        'racial bias': 'This text expresses prejudice against immigrants or people of another ethnic origin.',
+        'age bias': 'This text expresses prejudice against people because of their age.',
+        'disability bias': 'This text expresses prejudice against people with disabilities.',
+        'appearance bias': 'This text judges people by their physical appearance.',
+    },
+    'spanish': {
+        'gender bias': 'Este texto expresa un estereotipo de género.',
+        'racial bias': 'Este texto expresa prejuicios contra personas inmigrantes o de otro origen étnico.',
+        'age bias': 'Este texto expresa prejuicios contra las personas por su edad.',
+        'disability bias': 'Este texto expresa prejuicios contra las personas con discapacidad.',
+        'appearance bias': 'Este texto juzga a las personas por su aspecto físico.',
+    },
+}
+ZS_CATEGORY_THRESHOLD = 0.5      # entailment probability needed to name a category
+ZS_WINDOW_TOKENS = 200           # sentences are grouped into windows up to this size
 
-def _split_text(text: str, max_len: int = 512) -> List[str]:
-    """Split *text* into chunks of at most *max_len* characters on sentence
-    boundaries when possible."""
-    if len(text) <= max_len:
-        return [text]
-    chunks: List[str] = []
-    start = 0
-    while start < len(text):
-        end = start + max_len
-        if end >= len(text):
-            chunks.append(text[start:])
-            break
-        boundary = text.rfind('. ', start, end)
-        if boundary > start:
-            end = boundary + 1
-        chunks.append(text[start:end].strip())
-        start = end
-    return [c for c in chunks if c]
+DEFAULT_WEIGHTS = (0.30, 0.30, 0.20, 0.20)
+WEIGHTS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'config', 'ml_weights.json')
+
+
+def load_learned_weights(language: str) -> Optional[Dict]:
+    """Weights fitted by ``eval/fit_weights.py`` for *language*, if present."""
+    try:
+        with open(WEIGHTS_FILE, encoding='utf-8') as f:
+            return json.load(f).get(language)
+    except (OSError, ValueError):
+        return None
 
 
 class MLBiasDetector:
     """Detect bias using a fine-tuned bias detection model combined with
     zero-shot classification for bias categorisation."""
 
-    BIAS_CATEGORIES = [
-        'gender bias', 'racial bias', 'age bias',
-        'disability bias', 'appearance bias', 'neutral',
-    ]
+    BIAS_CATEGORIES = list(_HYPOTHESES['english']) + ['neutral']
 
     def __init__(self, device: str = "cuda", language: str = "english"):
         """Initialise ML bias detector.
@@ -74,11 +101,12 @@ class MLBiasDetector:
             fine-tuned model is skipped (English-only) and only the
             multilingual zero-shot model + keywords are used.
         """
-        self.device = 0 if device == "cuda" else -1
-        self.language = language
+        self.device = 0 if device == "cuda" and torch.cuda.is_available() else -1
+        self.language = language if language in _HYPOTHESES else 'english'
+        self.nlp = get_nlp(self.language)
 
-        # Fine-tuned binary bias classifier – English only
-        if language == 'english':
+        # Fine-tuned binary bias classifier - English only
+        if self.language == 'english':
             self.bias_classifier = pipeline(
                 "text-classification",
                 model=_FINETUNED_MODEL,
@@ -91,79 +119,127 @@ class MLBiasDetector:
                 "Skipping for language='%s'.", _FINETUNED_MODEL, language,
             )
 
-        # Zero-shot classifier – language-aware
-        zs_model = _ZS_MODELS.get(language, _ZS_MODELS['english'])
-        self.zero_shot_classifier = pipeline(
-            "zero-shot-classification",
-            model=zs_model,
-            device=self.device,
+        # NLI model for zero-shot categorisation - language-aware
+        zs_model = _ZS_MODELS[self.language]
+        self.nli_tokenizer = AutoTokenizer.from_pretrained(zs_model)
+        self.nli_model = AutoModelForSequenceClassification.from_pretrained(zs_model).eval()
+        if self.device == 0:
+            self.nli_model.to('cuda')
+        self._entail_id = next(
+            i for i, label in self.nli_model.config.id2label.items()
+            if label.lower().startswith('entail')
         )
+        self.learned = load_learned_weights(self.language)
+
+    # -- text units -------------------------------------------------------
+
+    def _sentences(self, text: str) -> List[Dict]:
+        doc = self.nlp(text)
+        return [{'text': s.text.strip(), 'start': s.start_char, 'end': s.end_char}
+                for s in doc.sents if s.text.strip()]
+
+    def _windows(self, sentences: List[Dict]) -> List[Dict]:
+        """Group consecutive sentences into windows of <= ZS_WINDOW_TOKENS tokens."""
+        windows, current, size = [], [], 0
+        for s in sentences:
+            n = len(self.nli_tokenizer.tokenize(s['text']))
+            if current and size + n > ZS_WINDOW_TOKENS:
+                windows.append(current)
+                current, size = [], 0
+            current.append(s)
+            size += n
+        if current:
+            windows.append(current)
+        return [{'text': ' '.join(s['text'] for s in w), 'start': w[0]['start'], 'end': w[-1]['end']}
+                for w in windows]
 
     # -- fine-tuned model ---------------------------------------------------
 
-    def detect_bias(self, text: str) -> Dict:
-        """Binary bias detection using the fine-tuned valurank model.
+    def detect_bias(self, text: str, sentences: Optional[List[Dict]] = None) -> Dict:
+        """Binary bias detection with the fine-tuned model, per sentence.
 
-        Returns a neutral result when the model is unavailable (non-English).
-        Long texts are chunked and scores averaged.
+        The page confidence is the highest sentence score, so one biased
+        sentence is not averaged away.  Returns a neutral result when the
+        model is unavailable (non-English).
         """
         if self.bias_classifier is None:
             return {
                 'is_biased': False,
                 'label': 'Unavailable',
                 'confidence': 0.0,
+                'available': False,
+                'sentence_scores': [],
             }
         try:
-            chunks = _split_text(text, max_len=512)
-            biased_scores: List[float] = []
-            for chunk in chunks:
-                result = self.bias_classifier(chunk)[0]
-                is_biased = result['label'] == 'LABEL_1'
-                score = result['score'] if is_biased else (1.0 - result['score'])
-                biased_scores.append(score)
-
-            avg_score = sum(biased_scores) / len(biased_scores)
-            is_biased = avg_score > 0.5
-            label = 'Biased' if is_biased else 'Non-biased'
+            sentences = sentences or self._sentences(text)
+            outputs = self.bias_classifier([s['text'] for s in sentences],
+                                           batch_size=16, truncation=True)
+            scored = []
+            for s, out in zip(sentences, outputs):
+                p = out['score'] if out['label'] == 'LABEL_1' else 1.0 - out['score']
+                scored.append({**s, 'score': round(p, 4)})
+            top = max((s['score'] for s in scored), default=0.0)
+            is_biased = top > 0.5
             return {
                 'is_biased': is_biased,
-                'label': label,
-                'confidence': round(avg_score, 4),
+                'label': 'Biased' if is_biased else 'Non-biased',
+                'confidence': round(top, 4),
+                'available': True,
+                'sentence_scores': [s for s in scored if s['score'] > 0.5],
             }
         except Exception as e:
             logger.error("Error in fine-tuned bias detection: %s", e)
-            return {'is_biased': False, 'label': 'Non-biased', 'confidence': 0.0}
+            return {'is_biased': False, 'label': 'Non-biased', 'confidence': 0.0,
+                    'available': True, 'sentence_scores': []}
 
     # -- zero-shot categorisation -------------------------------------------
 
-    def categorize_bias(self, text: str,
-                        categories: List[str] = None) -> Dict:
-        """Categorise bias type using zero-shot classification.
+    @torch.no_grad()
+    def _entailment(self, premises: List[str], hypotheses: List[str]) -> List[List[float]]:
+        """P(entailment) (3-way softmax) for every premise x hypothesis pair."""
+        pairs = [(p, h) for p in premises for h in hypotheses]
+        probs: List[float] = []
+        for i in range(0, len(pairs), 16):
+            batch = pairs[i:i + 16]
+            enc = self.nli_tokenizer([p for p, _ in batch], [h for _, h in batch],
+                                     return_tensors='pt', padding=True,
+                                     truncation='only_first', max_length=512)
+            if self.device == 0:
+                enc = enc.to('cuda')
+            logits = self.nli_model(**enc).logits
+            probs.extend(logits.softmax(-1)[:, self._entail_id].tolist())
+        n = len(hypotheses)
+        return [probs[i * n:(i + 1) * n] for i in range(len(premises))]
 
-        Long texts are chunked; per-label scores are averaged.
+    def categorize_bias(self, text: str, categories: List[str] = None,
+                        sentences: Optional[List[Dict]] = None) -> Dict:
+        """Categorise bias type with NLI, scoring each category independently.
+
+        Each category's page score is its highest entailment probability over
+        all windows.  ``top_category`` is ``'neutral'`` when no category
+        reaches ``ZS_CATEGORY_THRESHOLD``.
         """
+        hyps = _HYPOTHESES[self.language]
         if categories is None:
-            categories = self.BIAS_CATEGORIES
+            categories = list(hyps)
+        categories = [c for c in categories if c in hyps]
         try:
-            chunks = _split_text(text, max_len=512)
-            all_scores: Dict[str, List[float]] = {c: [] for c in categories}
-
-            for chunk in chunks:
-                result = self.zero_shot_classifier(chunk, categories)
-                for label, score in zip(result['labels'], result['scores']):
-                    all_scores[label].append(score)
-
-            avg_scores = {
-                label: sum(s) / len(s) for label, s in all_scores.items()
-            }
-            sorted_labels = sorted(avg_scores, key=avg_scores.get, reverse=True)
-            sorted_scores = [round(avg_scores[l], 4) for l in sorted_labels]
-
+            windows = self._windows(sentences or self._sentences(text))
+            scores = self._entailment([w['text'] for w in windows], [hyps[c] for c in categories])
+            best = {c: max(row[j] for row in scores) for j, c in enumerate(categories)}
+            sorted_labels = sorted(best, key=best.get, reverse=True)
+            top = sorted_labels[0]
+            flagged = [
+                {**w, 'category': c, 'score': round(row[j], 4)}
+                for w, row in zip(windows, scores) for j, c in enumerate(categories)
+                if row[j] >= ZS_CATEGORY_THRESHOLD
+            ]
             return {
                 'labels': sorted_labels,
-                'scores': sorted_scores,
-                'top_category': sorted_labels[0],
-                'top_score': sorted_scores[0],
+                'scores': [round(best[c], 4) for c in sorted_labels],
+                'top_category': top if best[top] >= ZS_CATEGORY_THRESHOLD else 'neutral',
+                'top_score': round(best[top], 4),
+                'flagged_windows': flagged,
             }
         except Exception as e:
             logger.error("Error in zero-shot bias categorisation: %s", e)
@@ -172,6 +248,7 @@ class MLBiasDetector:
                 'scores': [0.0] * len(categories),
                 'top_category': 'neutral',
                 'top_score': 0.0,
+                'flagged_windows': [],
             }
 
     # -- keyword / pattern helpers (delegate to shared module) --------------
@@ -190,10 +267,32 @@ class MLBiasDetector:
 
     # -- comprehensive analysis ---------------------------------------------
 
+    def signal_scores(self, text: str) -> Dict:
+        """Run every signal source once and return the raw parts and scores."""
+        sentences = self._sentences(text)
+        ml_detection = self.detect_bias(text, sentences)
+        ml_categorization = self.categorize_bias(text, sentences=sentences)
+        gender_bias = self.detect_gender_bias(text)
+        discriminatory_language = self.detect_discriminatory_language(text)
+
+        zs_is_biased = ml_categorization['top_category'] != 'neutral'
+        return {
+            'ml_detection': ml_detection,
+            'ml_categorization': ml_categorization,
+            'gender_bias': gender_bias,
+            'discriminatory_language': discriminatory_language,
+            'scores': {
+                'fine_tuned': ml_detection['confidence'] if ml_detection['is_biased'] else 0.0,
+                'zero_shot': ml_categorization['top_score'] if zs_is_biased else 0.0,
+                'gender_keyword': gender_bias['confidence'],
+                'discriminatory_keyword': kw_discriminatory_score(discriminatory_language),
+            },
+        }
+
     def comprehensive_bias_analysis(
         self, text: str,
         overall_bias_threshold: float = 0.25,
-        weights: tuple = (0.30, 0.30, 0.20, 0.20),
+        weights: tuple = DEFAULT_WEIGHTS,
     ) -> Dict:
         """Comprehensive bias analysis combining all signal sources.
 
@@ -203,45 +302,37 @@ class MLBiasDetector:
             Minimum ``overall_bias_score`` to mark the text as biased.
         weights : tuple
             ``(fine_tuned, zero_shot, gender_keyword, discriminatory_keyword)``.
+            The weight of an unavailable signal is spread over the others.
+            If ``config/ml_weights.json`` exists (``eval/fit_weights.py``),
+            the learned weights and threshold replace the defaults.
         """
-        ml_detection = self.detect_bias(text)
-        ml_categorization = self.categorize_bias(text)
-        gender_bias = self.detect_gender_bias(text)
-        discriminatory_language = self.detect_discriminatory_language(text)
+        parts = self.signal_scores(text)
+        s = parts['scores']
+        names = ['fine_tuned', 'zero_shot', 'gender_keyword', 'discriminatory_keyword']
 
-        has_discriminatory = any(
-            v['has_discriminatory_language']
-            for v in discriminatory_language.values()
-        )
+        if self.learned and weights == DEFAULT_WEIGHTS:
+            w = dict(zip(names, self.learned['weights']))
+            overall_bias_threshold = self.learned['threshold']
+        else:
+            w = dict(zip(names, weights))
+            if not parts['ml_detection'].get('available', True):
+                missing = w.pop('fine_tuned')
+                total = sum(w.values())
+                w = {k: v + missing * v / total for k, v in w.items()}
+                w['fine_tuned'] = 0.0
 
-        # --- score each signal source (0.0 when not triggered) ---
-        ml_score = ml_detection['confidence'] if ml_detection['is_biased'] else 0.0
-
-        zs_is_biased = ml_categorization['top_category'] != 'neutral'
-        zs_score = ml_categorization['top_score'] if zs_is_biased else 0.0
-
-        kw_gender_score = gender_bias['confidence'] if gender_bias['has_gender_bias'] else 0.0
-        kw_discrim_score = 1.0 if has_discriminatory else 0.0
-
-        w_ft, w_zs, w_kg, w_kd = weights
-        overall_bias_score = min(
-            ml_score * w_ft
-            + zs_score * w_zs
-            + kw_gender_score * w_kg
-            + kw_discrim_score * w_kd,
-            1.0,
-        )
-
-        # Threshold-based decision instead of OR-logic
+        overall_bias_score = min(sum(s[k] * w[k] for k in names), 1.0)
         is_biased = overall_bias_score >= overall_bias_threshold
         severity = score_to_severity(overall_bias_score)
 
         return {
             'text': text,
-            'ml_detection': ml_detection,
-            'ml_categorization': ml_categorization,
-            'gender_bias': gender_bias,
-            'discriminatory_language': discriminatory_language,
+            'ml_detection': parts['ml_detection'],
+            'ml_categorization': parts['ml_categorization'],
+            'gender_bias': parts['gender_bias'],
+            'discriminatory_language': parts['discriminatory_language'],
+            'findings': collect_findings(text, self.language),
+            'signal_scores': {k: round(v, 4) for k, v in s.items()},
             'overall_bias_score': round(overall_bias_score, 4),
             'is_biased': is_biased,
             'severity': severity,
@@ -274,7 +365,7 @@ class MLBiasDetector:
 
         # Zero-shot categorisation
         cat = analysis['ml_categorization']
-        report.append(f"\nBias Categorisation (zero-shot):")
+        report.append(f"\nBias Categorisation (zero-shot NLI, {_ZS_MODELS[self.language]}):")
         report.append(f"  - Top Category: {cat['top_category']}")
         report.append(f"  - Top Score: {cat['top_score']:.2%}")
         for label, score in zip(cat['labels'], cat['scores']):
@@ -298,5 +389,14 @@ class MLBiasDetector:
         for category, data in analysis['discriminatory_language'].items():
             if data['count'] > 0:
                 report.append(f"  - {category.upper()}: {', '.join(data['keywords_found'])}")
+
+        # Sentence-level findings with suggestions
+        if analysis.get('findings'):
+            report.append("\nFindings:")
+            for f in analysis['findings']:
+                line = f"  - [{f['subtype']}] \"{f['match']}\": {f['explanation']}"
+                if f.get('suggestion'):
+                    line += f" Suggestion: {f['suggestion']}"
+                report.append(line)
 
         return '\n'.join(report)
