@@ -75,7 +75,15 @@ python -m spacy download es_core_news_md
 
 Both spaCy models are needed: the language is detected per page, so either may be loaded. The `md` models give better lemmas and grammatical gender (used for generic-masculine detection); the `sm` models still work as a fallback.
 
-### 4. Optional: local LLM review
+### 4. Optional: OCR for scanned PDFs
+
+```bash
+sudo apt install ocrmypdf tesseract-ocr-spa tesseract-ocr-eng
+```
+
+When some pages have no text layer and `ocrmypdf` is installed, those pages are OCRed (in Spanish and English) and analysed. The summary and the report list them, since recognition errors are possible. Without it, such pages are reported as pages without text.
+
+### 5. Optional: local LLM review
 
 Install [Ollama](https://ollama.com) and pull a model: `ollama pull llama3.1:8b` (set `OLLAMA_MODEL` to use another one). The **LLM review** button is disabled while Ollama is not running.
 
@@ -168,7 +176,7 @@ Each PDF page is analysed separately, sentence by sentence:
 
 | Problem                                             | Solution                                                                                                     |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| "No extractable text was found in the provided PDF" | The PDF is likely scanned/image-only. Run it through OCR first; text extraction does not do OCR.             |
+| "No extractable text was found in the provided PDF" | The PDF is likely scanned/image-only. Install `ocrmypdf` (see setup step 4); if it is installed, OCR found no text either. |
 | First ML analysis takes a long time                 | The transformer models are downloading and loading. Later runs for the same language reuse the cached model. |
 | Wrong language detected                             | Detection runs per page; pages under 200 characters use the language of the first 3 pages. For the CLI, set `--language` explicitly. |
 | `OSError: No spaCy model installed for 'spanish'`   | Run `python -m spacy download es_core_news_md` (or `en_core_web_md` for English).                            |

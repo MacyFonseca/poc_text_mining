@@ -10,7 +10,7 @@ from langdetect import DetectorFactory, detect_langs
 
 from analysis.bias_detector import BiasDetector
 from config.settings import TextPreprocessingConfig
-from utils.pdf_extraction import extract_pages
+from utils.pdf_extraction import extract_pages, ocr_available
 from utils.preprocessing import TextPreprocessor
 
 # Set seed for deterministic language detection results
@@ -59,8 +59,9 @@ def run_bias_detection(pdf_file, get_detector_fn: Callable[[str], Any],
     extraction = extract_pages(pdf_file)
     pages = extraction['pages']
     if not pages:
-        raise ValueError("No extractable text was found in the provided PDF. "
-                         "It may be a scanned document (OCR is not available yet).")
+        hint = ("OCR found no text either." if ocr_available()
+                 else "It may be a scanned document: install ocrmypdf to read it.")
+        raise ValueError("No extractable text was found in the provided PDF. " + hint)
 
     texts = [p['text'] for p in pages]
     languages = detect_page_languages(texts) if language == 'auto' else [language] * len(texts)
@@ -107,6 +108,7 @@ def run_bias_detection(pdf_file, get_detector_fn: Callable[[str], Any],
             "page_languages": dict(language_counts),
             "pdf_pages": extraction['total_pages'],
             "empty_pages": extraction['empty_pages'],
+            "ocr_pages": extraction['ocr_pages'],
             "references_from_page": extraction['references_from_page'],
             "findings_by_subtype": dict(Counter(f['subtype'] for f in findings)),
         },

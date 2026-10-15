@@ -283,6 +283,8 @@ def render_summary_metrics(summary: dict):
                      + " pages, each analysed in its own language.")
     if summary.get("references_from_page"):
         notes.append(f"References from page {summary['references_from_page']} onwards were not analysed.")
+    if summary.get("ocr_pages"):
+        notes.append(f"Text of pages {summary['ocr_pages']} was read with OCR and may contain recognition errors.")
     if summary.get("empty_pages"):
         notes.append(f"Pages without extractable text (possibly scanned): {summary['empty_pages']}.")
     for note in notes:

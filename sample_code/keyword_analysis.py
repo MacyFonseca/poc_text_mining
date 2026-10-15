@@ -50,8 +50,10 @@ def main(pdf_path: str, language: str = "auto"):
     print(f"Page languages           : {s['page_languages']}")
     if s['references_from_page']:
         print(f"References skipped from  : page {s['references_from_page']}")
+    if s['ocr_pages']:
+        print(f"Pages read with OCR      : {s['ocr_pages']}")
     if s['empty_pages']:
-        print(f"Pages without text (OCR) : {s['empty_pages']}")
+        print(f"Pages without text       : {s['empty_pages']}")
     print(f"Pages flagged biased     : {s['biased_pages']}")
     print(f"Bias rate                : {s['bias_rate']:.1%}")
     print(f"Findings by type         : {s['findings_by_subtype']}")

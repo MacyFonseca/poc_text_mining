@@ -165,6 +165,8 @@ def report_to_markdown(report: Dict[str, Any]) -> str:
         notes.append('Languages: ' + ', '.join(f"{lang} ({n} pages)" for lang, n in s['page_languages'].items()) + '.')
     if s.get('references_from_page'):
         notes.append(f"References from page {s['references_from_page']} onwards were not analysed.")
+    if s.get('ocr_pages'):
+        notes.append(f"Pages read with OCR, which may contain recognition errors: {format_pages(s['ocr_pages'])}.")
     if s.get('empty_pages'):
         notes.append(f"Pages without extractable text, possibly scanned: {format_pages(s['empty_pages'])}.")
     notes.append('Findings are automatic suggestions for a reviewer, not verdicts. '

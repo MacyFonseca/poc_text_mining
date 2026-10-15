@@ -48,7 +48,7 @@ Status: `[x]` done · `[~]` code ready, needs data or a decision · `[ ]` pendin
 - [x] **P3.2** Running header/footer removal.
 - [x] **P3.3** Hyphenated line-break re-joining.
 - [x] **P3.4** Bibliography excluded from analysis.
-- [x] **P3.5** OCR for scanned pages with `ocrmypdf --skip-text -l spa+eng`. needs: `sudo apt install ocrmypdf tesseract-ocr-spa tesseract-ocr-eng`
+- [x] **P3.5** OCR for scanned pages: when pages have no text and `ocrmypdf` is installed, the PDF is OCRed (`--skip-text -l spa+eng`) and extracted again; OCRed pages are reported as `ocr_pages`. `utils/pdf_extraction.py`, `tests/test_pdf_extraction.py`
 - [x] **P3.6** Per-page language detection (short pages inherit the document language). `utils/bias_analysis.py`
 - [x] **P3.7** Token-based zero-shot windows (200 tokens) and batched inference.
 - [ ] **P3.8** CPU speed-up: ONNX export + int8 quantisation via `optimum[onnxruntime]`; check F1 drops < 0.01.
