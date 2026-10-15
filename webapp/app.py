@@ -20,6 +20,7 @@ from utils.bias_analysis import (
     run_llm_bias_detection,
     run_ml_bias_detection,
 )
+from utils.report import build_report, finding_level, report_to_markdown
 
 st.set_page_config(page_title="PDF Bias Analyzer", page_icon="📄", layout="wide")
 
@@ -230,10 +231,6 @@ SEVERITY_COLORS = {
 FEEDBACK_PATH = os.path.join(PROJECT_ROOT, "data", "feedback", "feedback.jsonl")
 
 
-def finding_level(score: float) -> str:
-    return "high" if score >= 0.6 else "medium" if score >= 0.35 else "low"
-
-
 def highlight_text(text: str, findings: list) -> str:
     """HTML of *text* with each finding wrapped in a coloured <mark> and a tooltip."""
     out, pos = [], 0
@@ -315,16 +312,31 @@ def render_method_details(page: dict, action: str):
     st.write(f"- Gender reference direction: `{gb.get('bias_direction', 'N/A')}`")
 
 
-def render_results(results: dict, action: str):
+def render_results(results: dict, action: str, filename: str):
     labels = {"keyword": "Keyword", "ml": "ML", "llm": "LLM review"}
     st.success(f"{labels[action]} analysis complete! Language: **{results['summary']['detected_language'].upper()}**")
     render_summary_metrics(results["summary"])
-    st.download_button(
-        "Download results (JSON)",
-        data=json.dumps(results, indent=2, ensure_ascii=False),
-        file_name=f"bias_results_{action}.json",
-        mime="application/json",
-    )
+    report_md = report_to_markdown(build_report(results, action, filename))
+    stem = os.path.splitext(filename)[0]
+    d1, d2, _ = st.columns([1, 1, 2])
+    with d1:
+        st.download_button(
+            "Download report (Markdown)",
+            data=report_md,
+            file_name=f"{stem} - {action}_bias_report.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+    with d2:
+        st.download_button(
+            "Download results (JSON)",
+            data=json.dumps(results, indent=2, ensure_ascii=False),
+            file_name=f"{stem} - {action}_bias_results.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+    with st.expander("Recommendation report (all findings grouped by type)"):
+        st.markdown(report_md)
     st.divider()
 
     st.subheader("Page Breakdown")
@@ -401,7 +413,7 @@ if uploaded_file is not None:
     # Full-Width Output View
     if st.session_state.analysis_results is not None:
         st.write("")
-        render_results(st.session_state.analysis_results, st.session_state.active_action)
+        render_results(st.session_state.analysis_results, st.session_state.active_action, uploaded_file.name)
 
 
 st.markdown(
