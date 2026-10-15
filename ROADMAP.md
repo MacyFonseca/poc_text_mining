@@ -37,7 +37,7 @@ Status: `[x]` done · `[~]` code ready, needs data or a decision · `[ ]` pendin
 - [ ] **P2.2** Dedicated Spanish classifier: SetFit few-shot (`paraphrase-multilingual-mpnet-base-v2`) or fine-tune `BSC-LT/roberta-base-bne` on EXIST-ES + DETESTS + gold dev. Plug in as the `fine_tuned` signal for Spanish. needs: P0.2 (or P0.6)
 - [x] **P2.3** Sentence-level fine-tuned scoring (page = highest sentence), weight redistribution when a signal is missing.
 - [x] **P2.4** Local LLM reviewer via Ollama, same interface, quotes verified against the text. `analysis/llm_bias_detector.py`
-- [x] **P2.4a** Evaluate the LLM reviewer: `python eval/evaluate.py -d llm --split test --tag llama3.1-8b` (~1 min/sentence on CPU). The first run was stopped for low memory; run it with no ML model loaded.
+- [x] **P2.4a** Evaluate the LLM reviewer: `python eval/evaluate.py -d llm --split test --tag llama3.1-8b`. Done 2026-10-09: F1 0.80 EN / 0.88 ES at 18-24 s per sentence. Misses English gendered terms and 2 of 5 Spanish generic masculines; flags 2 of 7 Spanish hard negatives.
 - [ ] **P2.4b** Better LLM: try a stronger local model (e.g. Qwen 2.5/3 14B, Gemma, BSC Salamandra) or an approved hosted API; compare with `eval/evaluate.py -d llm`. needs: decision on model and data policy
 - [~] **P2.5** Learned signal weights (logistic regression on dev, converted to weights + threshold). `eval/fit_weights.py`, `config/ml_weights.json`. Currently fitted on Claude-written dev data: refit after P0.2.
 - [ ] **P2.6** Replace or complement the English fine-tuned model (`himel7/bias-detector` is trained on news media bias, not gender bias). Candidate: classifier fine-tuned on EXIST-EN. needs: P0.6
@@ -60,7 +60,7 @@ Status: `[x]` done · `[~]` code ready, needs data or a decision · `[ ]` pendin
 - [x] **P4.3** Reviewer feedback buttons -> `data/feedback/feedback.jsonl` (gold format, git-ignored; move reviewed records to `data/gold/`).
 - [x] **P4.4** LLM review button (disabled when Ollama is not running).
 - [x] **P4.5** JSON download, mixed-language / bibliography / empty-page notes, neutral-page toggle.
-- [ ] **P4.6** Document-level recommendation report: group findings by type, one explanation + rewrite + page list each, downloadable as Markdown (later DOCX). needs: none
+- [x] **P4.6** Document-level recommendation report: findings grouped by type and wording, one explanation + rewrite + pages + example each; Markdown download and preview in the web app, written by both CLIs. `utils/report.py`. Not done: DOCX export, LLM rewrites of whole flagged sentences (optional).
 
 ## Results log
 
@@ -73,6 +73,6 @@ Dev-split scores are not listed: the rules were written against them.
 | 2026-10-08 | d3f180a   | ml       | 0.538 (0.64 / 0.47) | 0.111 (0.50 / 0.06) | Original; 44% / 14% hard-negative false positives |
 | 2026-10-08 | phase 1-4 | keyword  | 0.500 (1.00 / 0.33) | 0.857 (1.00 / 0.75) | 0 hard-negative false positives                   |
 | 2026-10-08 | phase 1-4 | ml       | 0.636 (1.00 / 0.47) | 0.897 (1.00 / 0.81) | Learned weights; PR-AUC 0.82 / 1.00               |
-| —          | —         | llm      | not measured        | not measured        | See P2.4a                                         |
+| 2026-10-09 | phase 1-4 | llm      | 0.800 (1.00 / 0.67) | 0.875 (0.88 / 0.88) | llama3.1:8b; PR-AUC 0.88 / 0.90; 29% Spanish hard-negative FP; 18-24 s/sentence |
 
 Not yet checked end to end: `sample_code/ml_analysis.py` on a PDF (stopped for low memory; the keyword CLI and the web app were checked).

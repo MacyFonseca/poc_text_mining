@@ -114,7 +114,7 @@ python sample_code/keyword_analysis.py path-to-file.pdf
 python sample_code/keyword_analysis.py path-to-file.pdf --language spanish   # Spanish text
 ```
 
-Analyses each page for gender bias and discriminatory language using keyword matching and regex patterns. Results are saved to `output/<pdf_name> - keyword_bias_results.json`.
+Analyses each page for gender bias and discriminatory language using keyword matching and regex patterns. Results are saved to `output/<pdf_name> - keyword_bias_results.json`, and a recommendation report grouping every finding by type (with pages and suggested rewrites) to `output/<pdf_name> - keyword_bias_report.md`.
 
 ### ML-based bias detection on a PDF (CLI)
 
@@ -123,7 +123,7 @@ python sample_code/ml_analysis.py path-to-file.pdf
 python sample_code/ml_analysis.py path-to-file.pdf --language spanish   # Spanish text
 ```
 
-Combines a fine-tuned bias classifier, zero-shot categorisation, and keyword analysis. Results are saved to `output/<pdf_name> - ml_bias_results.json`.
+Combines a fine-tuned bias classifier, zero-shot categorisation, and keyword analysis. Results are saved to `output/<pdf_name> - ml_bias_results.json`, and the recommendation report to `output/<pdf_name> - ml_bias_report.md`.
 
 The CLI scripts detect the language per page by default (`--language auto`); pass `--language spanish` or `english` to force one.
 

@@ -10,7 +10,8 @@ Usage:
     python sample_code/ml_analysis.py path/to/document.pdf --language spanish
 
 Language defaults to ``auto`` (detected per page).  Results are written to
-``output/<pdf name> - ml_bias_results.json``.
+``output/<pdf name> - ml_bias_results.json``, and the grouped
+recommendation report to ``output/<pdf name> - ml_bias_report.md``.
 """
 import argparse
 import json
@@ -22,6 +23,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 from utils.bias_analysis import SUPPORTED_LANGUAGES, format_page_report, run_ml_bias_detection
+from utils.report import build_report, report_to_markdown
 from analysis.ml_bias_detector import MLBiasDetector
 
 
@@ -65,6 +67,10 @@ def main(pdf_path: str, language: str = "auto"):
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     print(f"\nResults saved to {json_path}")
+    report_path = os.path.join(output_dir, f'{pdf_name} - ml_bias_report.md')
+    with open(report_path, 'w', encoding='utf-8') as f:
+        f.write(report_to_markdown(build_report(results, 'ml', os.path.basename(pdf_path))))
+    print(f"Report saved to {report_path}")
     return results
 
 

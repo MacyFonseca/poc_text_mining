@@ -35,7 +35,7 @@ python eval/evaluate.py --detector keyword|ml|llm --split test [--show-errors] [
 python eval/fit_weights.py --language spanish [--save]   # learn ML weights on the dev split
 ```
 
-CLI scripts write the full result dict to `output/<pdf_name> - {keyword,ml}_bias_results.json`.
+CLI scripts write the full result dict to `output/<pdf_name> - {keyword,ml}_bias_results.json` and the grouped recommendation report (`utils/report.py`) to `output/<pdf_name> - {keyword,ml}_bias_report.md`.
 
 No linter or build step. Sample PDFs live in `data/` (git-ignored); labelled sentences in `data/gold/` (tracked).
 
@@ -84,7 +84,7 @@ For `language='spanish'` the fine-tuned classifier is skipped (returns a stub wi
 
 ### Web layer
 
-`webapp/app.py` (Streamlit) is the active development surface (branch `webapp`). It calls `utils/bias_analysis.py` (`run_keyword_bias_detection`, `run_ml_bias_detection`, `run_llm_bias_detection`, all via `run_bias_detection`), which wraps extraction (`utils/pdf_extraction.py`: pypdf, header/footer removal, de-hyphenation, stops at the bibliography) + cleaning + detection and returns a `{summary, pages}` dict; pages carry `findings` for highlighting. The ML model is cached per language via `@st.cache_resource` and pinned to CPU. Reviewer 👍/👎 feedback is appended to `data/feedback/feedback.jsonl` (git-ignored) in gold-set format.
+`webapp/app.py` (Streamlit) is the active development surface (branch `webapp`). It calls `utils/bias_analysis.py` (`run_keyword_bias_detection`, `run_ml_bias_detection`, `run_llm_bias_detection`, all via `run_bias_detection`), which wraps extraction (`utils/pdf_extraction.py`: pypdf, header/footer removal, de-hyphenation, stops at the bibliography) + cleaning + detection and returns a `{summary, pages}` dict; pages carry `findings` for highlighting. `utils/report.build_report` groups a whole document's findings by subtype and wording (count, pages, suggestion, example) and `report_to_markdown` renders it for the "Download report" button and the CLIs. The ML model is cached per language via `@st.cache_resource` and pinned to CPU. Reviewer 👍/👎 feedback is appended to `data/feedback/feedback.jsonl` (git-ignored) in gold-set format.
 
 ### Preprocessing
 
