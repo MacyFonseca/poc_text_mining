@@ -17,7 +17,7 @@ Status: `[x]` done · `[~]` code ready, needs data or a decision · `[ ]` pendin
 - [x] **P0.3** Regression, contrast, hard-negative and gender-swap tests. `tests/test_keyword_detector.py`
 - [x] **P0.4** Evaluation script with dev/test splits and saved runs. `eval/evaluate.py`
 - [x] **P0.5** Inter-annotator agreement (Cohen's kappa). `eval/agreement.py`
-- [ ] **P0.6** Public datasets as secondary benchmarks (EXIST, DETESTS, MeTwo, BABE): write `eval/import_<dataset>.py`. needs: dataset access (registration)
+- [ ] **P0.6** Public datasets as secondary benchmarks ([EXIST](https://nlp.uned.es/exist2024/), [DETESTS](https://detestsiberlef.wixsite.com/detests/corpus), [DETESTS-Dis](https://huggingface.co/datasets/CLiC-UB/DETESTS-Dis), [MeTwo](https://github.com/franciscorodriguez92/MeTwo), [BABE](https://github.com/Media-Bias-Group/Neural-Media-Bias-Detection-Using-Distant-Supervision-With-BABE)): write `eval/import_<dataset>.py`. needs: dataset access (registration)
 
 ## Phase 1: Keyword detector
 
