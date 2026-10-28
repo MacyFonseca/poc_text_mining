@@ -33,11 +33,13 @@ python sample_code/ml_analysis.py path/to/doc.pdf [--language spanish]
 python -m pytest tests/ -q
 python eval/evaluate.py --detector keyword|ml|llm --split test [--show-errors] [--tag name]
 python eval/fit_weights.py --language spanish [--save]   # learn ML weights on the dev split
+python eval/compare.py --split test [--detectors keyword,ml,llm]   # side-by-side report (confidence intervals, McNemar test, error overlap)
+python eval/pool_sentences.py pool data/proposals/*.pdf   # real-proposal sentences for annotation; then `import <csv> --annotator xx`
 ```
 
 CLI scripts write the full result dict to `output/<pdf_name> - {keyword,ml}_bias_results.json` and the grouped recommendation report (`utils/report.py`) to `output/<pdf_name> - {keyword,ml}_bias_report.md`.
 
-No linter or build step. Sample PDFs live in `data/` (git-ignored); labelled sentences in `data/gold/` (tracked).
+No linter or build step. Input PDFs go in `data/` (git-ignored; real research proposals for evaluation in `data/proposals/`); labelled sentences in `data/gold/` (tracked; splits `dev`, `test`, `real`).
 
 ## Roadmap
 

@@ -27,6 +27,7 @@ sys.path.insert(0, PROJECT_ROOT)
 GOLD_DIR = os.path.join(PROJECT_ROOT, 'data', 'gold')
 RESULTS_DIR = os.path.join(PROJECT_ROOT, 'eval', 'results')
 LANGUAGES = ['english', 'spanish']
+SPLITS = ['dev', 'test', 'real', 'all']
 
 
 def load_gold(language: str, gold_dir: str = GOLD_DIR, split: str = 'all') -> list[dict]:
@@ -38,6 +39,8 @@ def load_gold(language: str, gold_dir: str = GOLD_DIR, split: str = 'all') -> li
                 line = line.strip()
                 if line:
                     item = json.loads(line)
+                    if item.get('label') is None:      # not annotated yet
+                        continue
                     if item['language'] == language and split in ('all', item.get('split', 'dev')):
                         items.append(item)
     return items
@@ -57,39 +60,41 @@ def build_detector(name: str, language: str):
     raise ValueError(f"Unknown detector: {name}")
 
 
-def compute_metrics(labels: list[int], preds: list[int], scores: list[float]) -> dict:
-    """Precision, recall, F1, accuracy and average precision (PR-AUC)."""
-    tp = sum(1 for y, p in zip(labels, preds) if y == 1 and p == 1)
-    fp = sum(1 for y, p in zip(labels, preds) if y == 0 and p == 1)
-    fn = sum(1 for y, p in zip(labels, preds) if y == 1 and p == 0)
-    tn = sum(1 for y, p in zip(labels, preds) if y == 0 and p == 0)
+def compute_metrics(labels: list[int], preds: list[int], scores: list[float],
+                    weights: list[float] | None = None) -> dict:
+    """Precision, recall, F1, accuracy and average precision (PR-AUC).
+
+    *weights* (one per item, default 1) undo pool sampling: an unflagged
+    sentence drawn at random from N stands for N / n_sampled sentences.
+    """
+    weights = weights or [1.0] * len(labels)
+    rows = list(zip(labels, preds, weights))
+    tp = sum(w for y, p, w in rows if y == 1 and p == 1)
+    fp = sum(w for y, p, w in rows if y == 0 and p == 1)
+    fn = sum(w for y, p, w in rows if y == 1 and p == 0)
+    tn = sum(w for y, p, w in rows if y == 0 and p == 0)
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     try:
         from sklearn.metrics import average_precision_score
-        pr_auc = float(average_precision_score(labels, scores)) if len(set(labels)) > 1 else None
+        pr_auc = (float(average_precision_score(labels, scores, sample_weight=weights))
+                  if len(set(labels)) > 1 else None)
     except ImportError:
         pr_auc = None
     return {
-        'n': len(labels), 'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn,
+        'n': len(labels), 'tp': round(tp, 2), 'fp': round(fp, 2), 'fn': round(fn, 2), 'tn': round(tn, 2),
         'precision': round(precision, 4), 'recall': round(recall, 4),
-        'f1': round(f1, 4), 'accuracy': round((tp + tn) / len(labels), 4) if labels else 0.0,
+        'f1': round(f1, 4), 'accuracy': round((tp + tn) / sum(weights), 4) if labels else 0.0,
         'pr_auc': round(pr_auc, 4) if pr_auc is not None else None,
     }
 
 
-def evaluate(detector_name: str, language: str, gold_dir: str = GOLD_DIR,
-             split: str = 'all') -> dict:
-    """Run *detector_name* over the gold set for *language* and return metrics."""
-    items = load_gold(language, gold_dir, split)
-    if not items:
-        return {}
-    detector = build_detector(detector_name, language)
-
-    start = time.time()
+def predict(detector, items: list[dict]) -> list[dict]:
+    """Run *detector* on every gold item; one row per item with label, pred and score."""
     rows = []
     for item in items:
+        start = time.time()
         analysis = detector.comprehensive_bias_analysis(item['text'])
         rows.append({
             'id': item['id'],
@@ -97,15 +102,20 @@ def evaluate(detector_name: str, language: str, gold_dir: str = GOLD_DIR,
             'label': item['label'],
             'category': item['category'],
             'hard_negative': item.get('hard_negative', False),
+            'weight': item.get('weight', 1.0),
             'pred': int(bool(analysis['is_biased'])),
             'score': float(analysis['overall_bias_score']),
+            'seconds': round(time.time() - start, 3),
         })
-    elapsed = time.time() - start
+    return rows
 
+
+def metrics_from_rows(rows: list[dict]) -> dict:
+    """Overall metrics, recall per category, hard-negative FP rate and speed."""
     labels = [r['label'] for r in rows]
     preds = [r['pred'] for r in rows]
     scores = [r['score'] for r in rows]
-    metrics = compute_metrics(labels, preds, scores)
+    metrics = compute_metrics(labels, preds, scores, [r.get('weight', 1.0) for r in rows])
 
     # Recall per bias category (how many of each kind the detector catches)
     by_cat = defaultdict(lambda: [0, 0])
@@ -120,8 +130,18 @@ def evaluate(detector_name: str, language: str, gold_dir: str = GOLD_DIR,
     metrics['hard_negative_fp_rate'] = (
         round(sum(r['pred'] for r in hard) / len(hard), 4) if hard else None
     )
-    metrics['seconds_per_item'] = round(elapsed / len(rows), 3)
+    metrics['seconds_per_item'] = round(sum(r.get('seconds', 0.0) for r in rows) / len(rows), 3)
+    return metrics
 
+
+def evaluate(detector_name: str, language: str, gold_dir: str = GOLD_DIR,
+             split: str = 'all') -> dict:
+    """Run *detector_name* over the gold set for *language* and return metrics."""
+    items = load_gold(language, gold_dir, split)
+    if not items:
+        return {}
+    rows = predict(build_detector(detector_name, language), items)
+    metrics = metrics_from_rows(rows)
     return {
         'metrics': metrics,
         'errors': [r for r in rows if r['label'] != r['pred']],
@@ -142,8 +162,9 @@ def main():
     parser.add_argument('--detector', '-d', choices=['keyword', 'ml', 'llm'], default='keyword')
     parser.add_argument('--language', '-l', choices=LANGUAGES + ['all'], default='all')
     parser.add_argument('--gold-dir', default=GOLD_DIR)
-    parser.add_argument('--split', choices=['dev', 'test', 'all'], default='all',
-                        help="dev = sentences rules were tuned on; test = held-out sentences")
+    parser.add_argument('--split', choices=SPLITS, default='all',
+                        help="dev = sentences rules were tuned on; test = held-out sentences; "
+                             "real = sentences from real PDFs (eval/pool_sentences.py)")
     parser.add_argument('--tag', default='', help="Label saved with the run, e.g. 'baseline'")
     parser.add_argument('--show-errors', action='store_true', help="Print misclassified sentences")
     parser.add_argument('--no-save', action='store_true')

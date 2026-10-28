@@ -1,26 +1,49 @@
 # Gold set: labelled sentences for evaluation
 
-One JSON object per line (`*.jsonl`). `eval/evaluate.py` loads every file in this folder.
+One JSON (JavaScript Object Notation) object per line (`*.jsonl`, JSON Lines). `eval/evaluate.py` loads every file in this folder.
 
 | Field | Meaning |
 | --- | --- |
 | `id` | Unique id, e.g. `es-001` |
 | `language` | `english` or `spanish` |
-| `split` | `dev` (allowed for tuning rules and weights) or `test` (never tune on it) |
+| `split` | `dev` (allowed for tuning rules and weights), `test` (never tune on it) or `real` (sentences from real research proposals, never tune on it) |
 | `text` | One sentence as it appears in a document |
 | `label` | `1` = biased or non-inclusive, `0` = acceptable |
 | `category` | `gender_stereotype`, `explicit_discrimination`, `generic_masculine`, `androcentric`, `gendered_term`, `other_discrimination`, or `none` |
 | `hard_negative` | `true` for acceptable sentences that mention gender or social groups (the false-positive trap) |
 | `source` | Who labelled it: `seed-claude`, `holdout-claude`, `expert-<initials>`, `feedback-webapp` |
+| `weight` | Optional, `real` split only: how many document sentences this item stands for (see below) |
+| `document`, `page` | Optional, `real` split only: where the sentence comes from |
 
 ## Current files
 
 - `seed_*.jsonl` (dev): 95 sentences written while building the Phase 1 rules. Scores on them are optimistic.
 - `holdout_*.jsonl` (test): 60 sentences written afterwards and not used for tuning.
 
-Both were written by Claude, not by domain experts. They are for development only. Real accuracy needs P0.2.
+Both were written by Claude, not by domain experts. They are for development only. Real accuracy needs roadmap task P0.2 (expert annotation).
 
-## Annotation guideline (for P0.2, expert annotation)
+- `real_*.jsonl` (real, once labelled): sentences from real research proposals, built with `eval/pool_sentences.py`. None yet.
+
+## Real split: pooling sentences from research proposals
+
+Use real research proposals in PDF (Portable Document Format), the kind of document the tool is meant to
+review. Put them in `data/proposals/` (git-ignored); demo or unrelated documents give misleading numbers.
+
+```
+python eval/pool_sentences.py pool data/proposals/*.pdf  # -> data/annotation/pool_<language>.csv
+# label the CSV (comma-separated values) file: label 1/0, category, hard_negative true/false, optional note
+python eval/pool_sentences.py import data/annotation/pool_spanish.csv --annotator ab
+python eval/compare.py --split real
+```
+
+The pool keeps every sentence that any detector flags, plus a random sample of the unflagged ones (50 per
+language by default). The CSV does not show which detector flagged what, so the flags do not influence the
+labels. A sampled unflagged sentence gets `weight = unflagged / sampled`, so weighted precision and recall
+estimate the rates over the whole documents, including bias that all detectors miss. `data/annotation/`
+is git-ignored; `real_*.jsonl` contains sentences from the source documents, so check they may be shared
+before committing them.
+
+## Annotation guideline (for roadmap task P0.2, expert annotation)
 
 Label each sentence on its own, as it would read in a research proposal.
 

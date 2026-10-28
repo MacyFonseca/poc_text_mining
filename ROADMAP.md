@@ -10,6 +10,31 @@ the next available task with `/roadmap next`, and the overview with `/roadmap st
 Status: `[x]` done · `[~]` code ready, needs data or a decision · `[ ]` pending.
 `needs:` lists prerequisites (tasks or external resources).
 
+Abbreviations used below:
+
+| Abbreviation | Meaning |
+| --- | --- |
+| EN / ES | English / Spanish |
+| P / R / F1 | Precision / recall / F1 score (harmonic mean of precision and recall) |
+| PR-AUC | Area under the precision-recall curve |
+| CI | Confidence interval (95%, bootstrap) |
+| FP / FN | False positive / false negative |
+| ML | Machine learning (the transformer-based detector) |
+| LLM | Large language model (the Ollama-based reviewer) |
+| NLI | Natural language inference (used by the zero-shot classifier) |
+| XLM-R | XLM-RoBERTa, a multilingual transformer model |
+| OCR | Optical character recognition |
+| ONNX | Open Neural Network Exchange (model format) |
+| int8 | 8-bit integer quantisation |
+| CSV / JSON / DOCX / PDF | Comma-separated values / JavaScript Object Notation / Word document / Portable Document Format |
+| CLI | Command-line interface |
+| IUEM | Instituto Universitario de Estudios de las Mujeres (ULL) |
+| ULL | Universidad de La Laguna |
+| APA | American Psychological Association |
+| EXIST | sEXism Identification in Social neTworks (shared task) |
+| DETESTS | DETEction and classification of racial STereotypes in Spanish (shared task) |
+| BABE | Bias Annotations By Experts (dataset) |
+
 ## Phase 0: Measure before changing anything
 
 - [x] **P0.1** Gold-set format, annotation guideline, 95 dev + 60 test sentences. `data/gold/`
@@ -18,6 +43,8 @@ Status: `[x]` done · `[~]` code ready, needs data or a decision · `[ ]` pendin
 - [x] **P0.4** Evaluation script with dev/test splits and saved runs. `eval/evaluate.py`
 - [x] **P0.5** Inter-annotator agreement (Cohen's kappa). `eval/agreement.py`
 - [ ] **P0.6** Public datasets as secondary benchmarks ([EXIST](https://nlp.uned.es/exist2024/), [DETESTS](https://detestsiberlef.wixsite.com/detests/corpus), [DETESTS-Dis](https://huggingface.co/datasets/CLiC-UB/DETESTS-Dis), [MeTwo](https://github.com/franciscorodriguez92/MeTwo), [BABE](https://github.com/Media-Bias-Group/Neural-Media-Bias-Detection-Using-Distant-Supervision-With-BABE)): write `eval/import_<dataset>.py`. needs: dataset access (registration)
+- [x] **P0.7** Side-by-side comparison of the three detectors: bootstrap 95% confidence intervals, recall per category with counts, pairwise McNemar, per-sentence error overlap. `eval/compare.py`
+- [~] **P0.8** Realistic `real` split from PDFs: pool sentences any detector flags + a random sample of the rest, label them in a CSV, import with sampling weights. `eval/pool_sentences.py`. needs: real research proposals in `data/proposals/` (see P0.2), then labels
 
 ## Phase 1: Keyword detector
 
@@ -67,12 +94,14 @@ Status: `[x]` done · `[~]` code ready, needs data or a decision · `[ ]` pendin
 Held-out **test** split (60 Claude-written sentences, never used for tuning). F1 / precision / recall.
 Dev-split scores are not listed: the rules were written against them.
 
-| Date       | Commit    | Detector | English F1 (P / R)  | Spanish F1 (P / R)  | Notes                                             |
-| ---------- | --------- | -------- | ------------------- | ------------------- | ------------------------------------------------- |
-| 2026-10-08 | d3f180a   | keyword  | 0.125 (1.00 / 0.07) | 0.118 (1.00 / 0.06) | Original proof of concept                         |
-| 2026-10-08 | d3f180a   | ml       | 0.538 (0.64 / 0.47) | 0.111 (0.50 / 0.06) | Original; 44% / 14% hard-negative false positives |
-| 2026-10-08 | phase 1-4 | keyword  | 0.500 (1.00 / 0.33) | 0.857 (1.00 / 0.75) | 0 hard-negative false positives                   |
-| 2026-10-08 | phase 1-4 | ml       | 0.636 (1.00 / 0.47) | 0.897 (1.00 / 0.81) | Learned weights; PR-AUC 0.82 / 1.00               |
+| Date       | Commit    | Detector | English F1 (P / R)  | Spanish F1 (P / R)  | Notes                                                                           |
+| ---------- | --------- | -------- | ------------------- | ------------------- | ------------------------------------------------------------------------------- |
+| 2026-10-08 | d3f180a   | keyword  | 0.125 (1.00 / 0.07) | 0.118 (1.00 / 0.06) | Original proof of concept                                                       |
+| 2026-10-08 | d3f180a   | ml       | 0.538 (0.64 / 0.47) | 0.111 (0.50 / 0.06) | Original; 44% / 14% hard-negative false positives                               |
+| 2026-10-08 | phase 1-4 | keyword  | 0.500 (1.00 / 0.33) | 0.857 (1.00 / 0.75) | 0 hard-negative false positives                                                 |
+| 2026-10-08 | phase 1-4 | ml       | 0.636 (1.00 / 0.47) | 0.897 (1.00 / 0.81) | Learned weights; PR-AUC 0.82 / 1.00                                             |
 | 2026-10-09 | phase 1-4 | llm      | 0.800 (1.00 / 0.67) | 0.875 (0.88 / 0.88) | llama3.1:8b; PR-AUC 0.88 / 0.90; 29% Spanish hard-negative FP; 18-24 s/sentence |
 
-Not yet checked end to end: `sample_code/ml_analysis.py` on a PDF (stopped for low memory; the keyword CLI and the web app were checked).
+2026-10-28 comparison (`eval/compare.py --split test`, commit 374d418) reproduces the rows above and adds 95% confidence intervals (CI).
+F1 pooled over both languages: keyword 0.71 [0.55-0.83], ml 0.78 [0.65-0.90], llm 0.84 [0.72-0.93].
+No pairwise difference is significant (McNemar test, p >= 0.06): the 60-item test split cannot rank the detectors.

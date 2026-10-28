@@ -10,7 +10,36 @@ Every detector reports **findings**: the exact passage, its type (e.g. generic m
 
 Improvement work is tracked in [`ROADMAP.md`](ROADMAP.md).
 
-The web app is built on the **GENDERVISION-AI** project, conducted at the Instituto Universitario de Estudios de las Mujeres (IUEM), Universidad de La Laguna.
+The web app is built on the **GENDERVISION-AI** (AI: artificial intelligence) project, conducted at the Instituto Universitario de Estudios de las Mujeres (IUEM), Universidad de La Laguna (ULL).
+
+## Abbreviations
+
+| Abbreviation | Meaning |
+| --- | --- |
+| PDF | Portable Document Format |
+| ML | Machine learning (the transformer-based detector) |
+| LLM | Large language model (the Ollama-based reviewer) |
+| NLP | Natural language processing |
+| NLTK | Natural Language Toolkit (Python library) |
+| BART | Bidirectional and Auto-Regressive Transformer (English zero-shot model) |
+| XLM-R | XLM-RoBERTa, a cross-lingual transformer model (Spanish zero-shot model) |
+| `md` / `sm` | Medium / small spaCy model sizes |
+| EN / ES | English / Spanish |
+| P / R / F1 | Precision / recall / F1 score (harmonic mean of precision and recall) |
+| OCR | Optical character recognition |
+| CLI | Command-line interface |
+| UI | User interface |
+| JSON | JavaScript Object Notation |
+| CSV | Comma-separated values |
+| regex | Regular expression |
+| NER | Named entity recognition |
+| POS | Part of speech |
+| CPU / GPU | Central / graphics processing unit |
+| CUDA | Compute Unified Device Architecture (NVIDIA GPU platform) |
+| RAM | Random-access memory |
+| GB | Gigabyte |
+| IUEM | Instituto Universitario de Estudios de las Mujeres |
+| ULL | Universidad de La Laguna |
 
 ## Project Structure
 
@@ -32,6 +61,8 @@ poc_text_mining/
 │   └── llm_bias_detector.py     # LLMBiasDetector: local LLM review via Ollama
 ├── eval/
 │   ├── evaluate.py              # Precision / recall / F1 of a detector on data/gold
+│   ├── compare.py               # Side-by-side comparison of the three detectors (confidence intervals, McNemar test)
+│   ├── pool_sentences.py        # Sentences from real proposals for annotation, and import of the labels
 │   ├── fit_weights.py           # Learn ML signal weights on the dev split
 │   └── agreement.py             # Inter-annotator agreement (Cohen's kappa)
 ├── tests/                       # pytest regression and contrast tests
@@ -42,6 +73,7 @@ poc_text_mining/
 │   ├── keyword_analysis.py      # CLI: keyword-based bias detection on a PDF
 │   └── ml_analysis.py           # CLI: ML-based bias detection on a PDF
 ├── data/                        # Input PDFs (git-ignored)
+│   ├── proposals/               # Real research proposals used to build the `real` evaluation split (git-ignored)
 │   └── gold/                    # Labelled sentences for evaluation (tracked; see its README)
 ├── ROADMAP.md                   # Improvement plan and results log
 ├── output/                      # Generated JSON results from the CLI scripts (git-ignored)
@@ -141,6 +173,8 @@ The CLI scripts detect the language per page by default (`--language auto`); pas
 python -m pytest tests/ -q                                    # regression and contrast tests
 python eval/evaluate.py --detector keyword --split test       # P / R / F1 on held-out sentences
 python eval/evaluate.py --detector ml --language spanish --show-errors
+python eval/compare.py --split test                           # keyword vs ML vs LLM report in eval/results/
+python eval/pool_sentences.py pool data/proposals/*.pdf       # sentences from real proposals to label
 ```
 
 See [`data/gold/README.md`](data/gold/README.md) for the labelled-data format and annotation guideline, and the results log in [`ROADMAP.md`](ROADMAP.md).
