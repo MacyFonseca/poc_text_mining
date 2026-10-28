@@ -1,7 +1,7 @@
 """Bias detection using fine-tuned transformer models and zero-shot classification.
 
 Combines three signal sources:
-1. Fine-tuned binary bias classifier (``valurank/distilroberta-bias`` – English only).
+1. Fine-tuned binary bias classifier (``himel7/bias-detector`` – English only).
 2. Zero-shot categorisation (BART for English, XLM-R for Spanish).
 3. Keyword / pattern analysis (shared ``bias_keywords`` module).
 
@@ -9,7 +9,6 @@ The ``is_biased`` decision is now threshold-based rather than OR-gated to
 reduce false positives on texts that merely *discuss* gender.
 """
 import logging
-import re
 from typing import Dict, List
 
 from transformers import pipeline
