@@ -11,8 +11,10 @@ import logging
 from typing import Dict, List
 
 from analysis.bias_keywords import (
+    collect_findings,
     detect_discriminatory_language,
     detect_gender_bias as kw_detect_gender_bias,
+    discriminatory_score as kw_discriminatory_score,
     score_to_severity,
 )
 
@@ -77,12 +79,8 @@ class BiasDetector:
         )
         discriminatory = self.detect_discriminatory_language(text)
 
-        has_discriminatory = any(
-            v['has_discriminatory_language'] for v in discriminatory.values()
-        )
-
-        gender_score = gender_bias['confidence'] if gender_bias['has_gender_bias'] else 0.0
-        discriminatory_score = 1.0 if has_discriminatory else 0.0
+        gender_score = gender_bias['confidence']
+        discriminatory_score = kw_discriminatory_score(discriminatory)
 
         w_gender, w_discrim = weights
         overall_bias_score = min(
@@ -97,6 +95,7 @@ class BiasDetector:
             'text': text,
             'gender_bias': gender_bias,
             'discriminatory_language': discriminatory,
+            'findings': collect_findings(text, self.language),
             'overall_bias_score': round(overall_bias_score, 4),
             'is_biased': is_biased,
             'severity': severity,

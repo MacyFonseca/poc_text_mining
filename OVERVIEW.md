@@ -6,6 +6,24 @@ This proof of concept was created to explore automated bias detection in textual
 
 The key research question: **can we reliably detect subtle bias in text, and how do lightweight keyword methods compare to ML-based approaches?**
 
+## Abbreviations
+
+| Abbreviation | Meaning |
+| --- | --- |
+| PoC | Proof of concept |
+| ML | Machine learning |
+| NLTK | Natural Language Toolkit (Python library) |
+| URL | Uniform Resource Locator (web address) |
+| HTML | HyperText Markup Language |
+| POS | Part of speech |
+| regex | Regular expression |
+| BART | Bidirectional and Auto-Regressive Transformer (English zero-shot model) |
+| XLM-RoBERTa (XLM-R) | Cross-lingual RoBERTa (Robustly Optimised BERT Approach; BERT: Bidirectional Encoder Representations from Transformers) transformer model |
+| CLI | Command-line interface |
+| PDF | Portable Document Format |
+| JSON | JavaScript Object Notation |
+| GPU | Graphics processing unit |
+
 ## Development Process
 
 The project was built incrementally, with each phase adding a new capability on top of the previous one.

@@ -7,7 +7,8 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.stem import WordNetLemmatizer
 import spacy
-from config.settings import TextPreprocessingConfig, SPACY_MODELS
+from config.settings import TextPreprocessingConfig
+from utils.nlp import get_nlp
 
 # Download required NLTK data
 try:
@@ -39,15 +40,7 @@ class TextPreprocessor:
         self.config = config
         self.stopwords_set = set(stopwords.words(config.language))
 
-        # Load language-specific spacy model
-        spacy_model = SPACY_MODELS.get(config.language, 'en_core_web_sm')
-        try:
-            self.nlp = spacy.load(spacy_model)
-        except OSError:
-            print(f"Downloading spacy model {spacy_model}...")
-            import os
-            os.system(f'python -m spacy download {spacy_model}')
-            self.nlp = spacy.load(spacy_model)
+        self.nlp = get_nlp(config.language)
 
         # Use WordNet lemmatizer for English, spacy lemmatizer for others
         if config.language == 'english':
